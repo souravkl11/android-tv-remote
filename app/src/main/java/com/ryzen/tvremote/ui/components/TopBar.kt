@@ -54,6 +54,7 @@ fun TopBar(
     onRePairClick: () -> Unit,
     onProtocolSwitchClick: () -> Unit,
     onTutorialClick: () -> Unit,
+    onCheckUpdateClick: () -> Unit,
     isAdbMode: Boolean,
     isAmoledMode: Boolean,
     onToggleAmoled: () -> Unit,
@@ -239,6 +240,13 @@ fun TopBar(
                         onClick = {
                             menuExpanded = false
                             onTutorialClick()
+                        }
+                    )
+                    DropdownMenuItem(
+                        text = { Text("Check for Updates", color = RemoteTheme.colors.textPrimary) },
+                        onClick = {
+                            menuExpanded = false
+                            onCheckUpdateClick()
                         }
                     )
                     DropdownMenuItem(

@@ -15,9 +15,15 @@ import com.ryzen.tvremote.protocol.IRemoteController
 import com.ryzen.tvremote.protocol.KeyDirection
 import com.ryzen.tvremote.protocol.RemoteKey
 import com.ryzen.tvremote.protocol.VolumeState
+import com.ryzen.tvremote.update.AppUpdateInfo
+import com.ryzen.tvremote.update.UpdateChecker
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
@@ -33,6 +39,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         private const val KEY_USE_ADB = "use_adb"
         private const val KEY_AMOLED_MODE = "is_amoled_mode"
         private const val KEY_TUTORIAL_SEEN = "has_seen_tutorial"
+        private const val KEY_IGNORED_UPDATE = "ignored_update_version"
         const val DEFAULT_IP = ""
         const val DEFAULT_NAME = "Android TV"
     }
@@ -51,6 +58,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     val isAmoledMode: StateFlow<Boolean> = _isAmoledMode.asStateFlow()
 
     val showTutorial = MutableStateFlow(!prefs.getBoolean(KEY_TUTORIAL_SEEN, false))
+    val availableUpdate = MutableStateFlow<AppUpdateInfo?>(null)
+
+    private val _toastEvent = MutableSharedFlow<String>()
+    val toastEvent: SharedFlow<String> = _toastEvent.asSharedFlow()
 
     private val activeController: IRemoteController
         get() = if (_isAdbMode.value) adbClient else v2Client
@@ -130,6 +141,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
         // Auto-connect to last saved IP address
         connectToTv(_currentIp.value, _currentName.value)
+
+        // Check for updates in background shortly after startup
+        viewModelScope.launch {
+            delay(2500L)
+            checkForUpdates(manual = false)
+        }
     }
 
     fun connectToTv(ip: String, name: String = DEFAULT_NAME) {
@@ -189,6 +206,38 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun openTutorial() {
         showTutorial.value = true
+    }
+
+    fun getAppVersion(): String {
+        return try {
+            val pInfo = getApplication<Application>().packageManager.getPackageInfo(getApplication<Application>().packageName, 0)
+            pInfo.versionName ?: "1.1.0"
+        } catch (e: Exception) {
+            "1.1.0"
+        }
+    }
+
+    fun checkForUpdates(manual: Boolean = false) {
+        viewModelScope.launch {
+            val currentVersion = getAppVersion()
+            val update = UpdateChecker.checkForUpdate(currentVersion)
+            if (update != null) {
+                val ignoredVersion = prefs.getString(KEY_IGNORED_UPDATE, "")
+                if (manual || ignoredVersion != update.latestVersion) {
+                    availableUpdate.value = update
+                }
+            } else if (manual) {
+                _toastEvent.emit("You are on the latest version (v$currentVersion)")
+            }
+        }
+    }
+
+    fun dismissUpdate(ignoreForNow: Boolean = true) {
+        val update = availableUpdate.value
+        if (ignoreForNow && update != null) {
+            prefs.edit().putString(KEY_IGNORED_UPDATE, update.latestVersion).apply()
+        }
+        availableUpdate.value = null
     }
 
     fun sendKey(key: RemoteKey, direction: KeyDirection = KeyDirection.SHORT) {

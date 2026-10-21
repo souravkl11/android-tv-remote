@@ -16,6 +16,7 @@ The app implements Google's Android TV Remote Protocol v2 (TLS pairing and encry
 - Multi-User Session Management: Automatically disconnects when the app is placed in the background so other phones or family members can control the TV without lockouts.
 - Quick Settings Tile: Launch the remote directly from the Android Quick Settings shade.
 - True AMOLED Mode: Pitch-black 0-nit theme designed for OLED displays, with subtle contrast borders and tactile feedback.
+- In-App Update Notifier: Automatically checks GitHub Releases for new updates with direct download and release notes viewer.
 
 ## Requirements
 

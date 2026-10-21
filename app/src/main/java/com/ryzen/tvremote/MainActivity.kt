@@ -1,6 +1,9 @@
 package com.ryzen.tvremote
 
+import android.content.Intent
+import android.net.Uri
 import android.os.Bundle
+import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -14,10 +17,12 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import com.ryzen.tvremote.protocol.RemoteKey
 import com.ryzen.tvremote.ui.MainViewModel
@@ -28,6 +33,7 @@ import com.ryzen.tvremote.ui.components.PairingPinDialog
 import com.ryzen.tvremote.ui.components.TopBar
 import com.ryzen.tvremote.ui.components.Trackpad
 import com.ryzen.tvremote.ui.components.TutorialDialog
+import com.ryzen.tvremote.ui.components.UpdateDialog
 import com.ryzen.tvremote.ui.components.VolumePillRow
 import com.ryzen.tvremote.ui.theme.RemoteTheme
 import com.ryzen.tvremote.ui.theme.TVRemoteTheme
@@ -74,6 +80,15 @@ fun TVRemoteScreen(viewModel: MainViewModel) {
     val showDevicePickerDialog by viewModel.showDevicePickerDialog.collectAsState()
     val showKeyboardDialog by viewModel.showKeyboardDialog.collectAsState()
     val showTutorial by viewModel.showTutorial.collectAsState()
+    val availableUpdate by viewModel.availableUpdate.collectAsState()
+
+    val context = LocalContext.current
+
+    LaunchedEffect(Unit) {
+        viewModel.toastEvent.collect { message ->
+            Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
+        }
+    }
 
     Column(
         modifier = Modifier
@@ -94,6 +109,7 @@ fun TVRemoteScreen(viewModel: MainViewModel) {
             onRePairClick = { viewModel.rePair() },
             onProtocolSwitchClick = { viewModel.setAdbMode(!isAdbMode) },
             onTutorialClick = { viewModel.openTutorial() },
+            onCheckUpdateClick = { viewModel.checkForUpdates(manual = true) },
             isAdbMode = isAdbMode,
             isAmoledMode = isAmoledMode,
             onToggleAmoled = { viewModel.toggleAmoledMode() }
@@ -150,6 +166,27 @@ fun TVRemoteScreen(viewModel: MainViewModel) {
     if (showTutorial) {
         TutorialDialog(
             onDismiss = { viewModel.dismissTutorial() }
+        )
+    }
+
+    availableUpdate?.let { update ->
+        UpdateDialog(
+            updateInfo = update,
+            currentVersion = viewModel.getAppVersion(),
+            onDownload = { url ->
+                try {
+                    val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url)).apply {
+                        flags = Intent.FLAG_ACTIVITY_NEW_TASK
+                    }
+                    context.startActivity(intent)
+                } catch (e: Exception) {
+                    Toast.makeText(context, "Could not open browser: ${e.message}", Toast.LENGTH_SHORT).show()
+                }
+                viewModel.dismissUpdate(ignoreForNow = false)
+            },
+            onDismiss = {
+                viewModel.dismissUpdate(ignoreForNow = true)
+            }
         )
     }
 }
