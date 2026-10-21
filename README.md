@@ -9,7 +9,9 @@ The app implements Google's Android TV Remote Protocol v2 (TLS pairing and encry
 - Native Android TV Protocol v2: Connects via TLS (ports 6467 for pairing, 6466 for remote commands) with standard on-screen PIN code verification.
 - ADB Fallback Protocol: Alternative connection via ADB over Wi-Fi (port 5555) for developer-enabled devices and unsupported displays.
 - Automatic TV Discovery: Discovers Android TVs on your local network using mDNS (Network Service Discovery / NSD).
-- Draggable D-Pad Trackpad: Virtual thumbstick trackpad supporting directional drags, continuous repeat on hold, and center tap for selection.
+- Draggable & Tappable D-Pad Trackpad: Supports smooth virtual thumbstick dragging with continuous repeat, as well as direct arrow tapping for step-by-step navigation.
+- OK Button Press-and-Hold: Long-press the center OK button to trigger contextual menus (add to watchlist, move apps, options) on Android TV.
+- First-Launch Guide: Built-in onboarding tutorial explaining navigation gestures, live typing, and shortcuts.
 - Real-Time Live Typing: Syncs keystrokes and backspaces directly to active TV input fields as you type on your phone.
 - Multi-User Session Management: Automatically disconnects when the app is placed in the background so other phones or family members can control the TV without lockouts.
 - Quick Settings Tile: Launch the remote directly from the Android Quick Settings shade.

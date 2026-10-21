@@ -12,6 +12,7 @@ import com.ryzen.tvremote.protocol.ConnectionStatus
 import com.ryzen.tvremote.protocol.DiscoveredDevice
 import com.ryzen.tvremote.protocol.DiscoveryManager
 import com.ryzen.tvremote.protocol.IRemoteController
+import com.ryzen.tvremote.protocol.KeyDirection
 import com.ryzen.tvremote.protocol.RemoteKey
 import com.ryzen.tvremote.protocol.VolumeState
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -31,6 +32,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         private const val KEY_LAST_NAME = "last_tv_name"
         private const val KEY_USE_ADB = "use_adb"
         private const val KEY_AMOLED_MODE = "is_amoled_mode"
+        private const val KEY_TUTORIAL_SEEN = "has_seen_tutorial"
         const val DEFAULT_IP = ""
         const val DEFAULT_NAME = "Android TV"
     }
@@ -47,6 +49,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     private val _isAmoledMode = MutableStateFlow(prefs.getBoolean(KEY_AMOLED_MODE, false))
     val isAmoledMode: StateFlow<Boolean> = _isAmoledMode.asStateFlow()
+
+    val showTutorial = MutableStateFlow(!prefs.getBoolean(KEY_TUTORIAL_SEEN, false))
 
     private val activeController: IRemoteController
         get() = if (_isAdbMode.value) adbClient else v2Client
@@ -178,8 +182,17 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         setAmoledMode(!_isAmoledMode.value)
     }
 
-    fun sendKey(key: RemoteKey) {
-        activeController.sendKey(key)
+    fun dismissTutorial() {
+        showTutorial.value = false
+        prefs.edit().putBoolean(KEY_TUTORIAL_SEEN, true).apply()
+    }
+
+    fun openTutorial() {
+        showTutorial.value = true
+    }
+
+    fun sendKey(key: RemoteKey, direction: KeyDirection = KeyDirection.SHORT) {
+        activeController.sendKey(key, direction)
     }
 
     fun sendText(text: String) {

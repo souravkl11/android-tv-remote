@@ -417,22 +417,28 @@ class AndroidTvRemoteV2Client(
         sendChannel.trySend(msg)
     }
 
-    override fun sendKey(key: RemoteKey) {
+    override fun sendKey(key: RemoteKey, direction: KeyDirection) {
         val out = remoteOut
         if (out == null || remoteSocket?.isConnected != true) {
             Log.w(TAG, "Cannot send key ${key.displayName}: remote socket not connected (out=$out, connected=${remoteSocket?.isConnected})")
             return
         }
 
+        val protoDirection = when (direction) {
+            KeyDirection.SHORT -> RemoteDirection.SHORT
+            KeyDirection.START_LONG -> RemoteDirection.START_LONG
+            KeyDirection.END_LONG -> RemoteDirection.END_LONG
+        }
+
         val msg = RemoteMessage.newBuilder().apply {
             remoteKeyInject = RemoteKeyInject.newBuilder().apply {
                 keyCode = key.protoKeyCode
-                direction = RemoteDirection.SHORT
+                this.direction = protoDirection
             }.build()
         }.build()
 
         sendRaw(msg)
-        Log.d(TAG, "Dispatched key: ${key.displayName} (${key.protoKeyCode}) to TV")
+        Log.d(TAG, "Dispatched key: ${key.displayName} (${key.protoKeyCode}) direction=$direction to TV")
     }
 
     override fun sendText(text: String) {

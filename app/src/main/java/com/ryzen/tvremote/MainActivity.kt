@@ -27,6 +27,7 @@ import com.ryzen.tvremote.ui.components.KeyboardDialog
 import com.ryzen.tvremote.ui.components.PairingPinDialog
 import com.ryzen.tvremote.ui.components.TopBar
 import com.ryzen.tvremote.ui.components.Trackpad
+import com.ryzen.tvremote.ui.components.TutorialDialog
 import com.ryzen.tvremote.ui.components.VolumePillRow
 import com.ryzen.tvremote.ui.theme.RemoteTheme
 import com.ryzen.tvremote.ui.theme.TVRemoteTheme
@@ -72,6 +73,7 @@ fun TVRemoteScreen(viewModel: MainViewModel) {
     val showPinDialog by viewModel.showPinDialog.collectAsState()
     val showDevicePickerDialog by viewModel.showDevicePickerDialog.collectAsState()
     val showKeyboardDialog by viewModel.showKeyboardDialog.collectAsState()
+    val showTutorial by viewModel.showTutorial.collectAsState()
 
     Column(
         modifier = Modifier
@@ -91,13 +93,14 @@ fun TVRemoteScreen(viewModel: MainViewModel) {
             onPowerClick = { viewModel.sendKey(RemoteKey.POWER) },
             onRePairClick = { viewModel.rePair() },
             onProtocolSwitchClick = { viewModel.setAdbMode(!isAdbMode) },
+            onTutorialClick = { viewModel.openTutorial() },
             isAdbMode = isAdbMode,
             isAmoledMode = isAmoledMode,
             onToggleAmoled = { viewModel.toggleAmoledMode() }
         )
 
         Trackpad(
-            onKey = { key -> viewModel.sendKey(key) },
+            onKey = { key, direction -> viewModel.sendKey(key, direction) },
             modifier = Modifier.weight(1f)
         )
 
@@ -141,6 +144,12 @@ fun TVRemoteScreen(viewModel: MainViewModel) {
             onSendText = { text -> viewModel.sendText(text) },
             onKey = { key -> viewModel.sendKey(key) },
             onDismiss = { viewModel.showKeyboardDialog.value = false }
+        )
+    }
+
+    if (showTutorial) {
+        TutorialDialog(
+            onDismiss = { viewModel.dismissTutorial() }
         )
     }
 }

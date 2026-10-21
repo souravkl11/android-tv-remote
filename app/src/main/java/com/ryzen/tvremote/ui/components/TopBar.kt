@@ -37,6 +37,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.ryzen.tvremote.protocol.ConnectionStatus
@@ -52,6 +53,7 @@ fun TopBar(
     onPowerClick: () -> Unit,
     onRePairClick: () -> Unit,
     onProtocolSwitchClick: () -> Unit,
+    onTutorialClick: () -> Unit,
     isAdbMode: Boolean,
     isAmoledMode: Boolean,
     onToggleAmoled: () -> Unit,
@@ -69,6 +71,7 @@ fun TopBar(
         // Left: Dropdown chevron + Connection status + TV Name
         Row(
             modifier = Modifier
+                .weight(1f, fill = false)
                 .clip(RoundedCornerShape(8.dp))
                 .clickable { onDevicePickerClick() }
                 .padding(4.dp),
@@ -103,7 +106,9 @@ fun TopBar(
                     text = statusText,
                     color = statusColor,
                     fontSize = 14.sp,
-                    fontWeight = FontWeight.Medium
+                    fontWeight = FontWeight.Medium,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
                 )
 
                 Row(verticalAlignment = Alignment.CenterVertically) {
@@ -118,11 +123,15 @@ fun TopBar(
                         text = deviceName,
                         color = if (status is ConnectionStatus.Connected) RemoteTheme.colors.accentGreen else RemoteTheme.colors.textSecondary,
                         fontSize = 12.sp,
-                        fontWeight = FontWeight.Normal
+                        fontWeight = FontWeight.Normal,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
                     )
                 }
             }
         }
+
+        Spacer(modifier = Modifier.width(8.dp))
 
         // Right: Action buttons
         Row(
@@ -132,7 +141,7 @@ fun TopBar(
             // TV Input Source
             Box(
                 modifier = Modifier
-                    .size(38.dp)
+                    .size(40.dp)
                     .clip(CircleShape)
                     .background(RemoteTheme.colors.buttonSurface)
                     .border(1.5.dp, RemoteTheme.colors.inputPillBorder, CircleShape)
@@ -150,7 +159,7 @@ fun TopBar(
             // Keyboard input
             Box(
                 modifier = Modifier
-                    .size(38.dp)
+                    .size(40.dp)
                     .clip(CircleShape)
                     .background(RemoteTheme.colors.buttonSurface)
                     .clickable { onKeyboardClick() },
@@ -167,7 +176,7 @@ fun TopBar(
             // Power
             Box(
                 modifier = Modifier
-                    .size(38.dp)
+                    .size(40.dp)
                     .clip(CircleShape)
                     .background(RemoteTheme.colors.buttonSurface)
                     .clickable { onPowerClick() },
@@ -181,25 +190,21 @@ fun TopBar(
                 )
             }
 
-            // Overflow Menu
+            // Overflow Menu (fixed size and full touch target)
             Box(
                 modifier = Modifier
-                    .size(38.dp)
+                    .size(40.dp)
                     .clip(CircleShape)
-                    .background(RemoteTheme.colors.buttonSurface),
+                    .background(RemoteTheme.colors.buttonSurface)
+                    .clickable { menuExpanded = true },
                 contentAlignment = Alignment.Center
             ) {
-                IconButton(
-                    onClick = { menuExpanded = true },
-                    modifier = Modifier.size(38.dp)
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.MoreVert,
-                        contentDescription = "Menu",
-                        tint = RemoteTheme.colors.textPrimary,
-                        modifier = Modifier.size(20.dp)
-                    )
-                }
+                Icon(
+                    imageVector = Icons.Default.MoreVert,
+                    contentDescription = "Menu",
+                    tint = RemoteTheme.colors.textPrimary,
+                    modifier = Modifier.size(22.dp)
+                )
 
                 DropdownMenu(
                     expanded = menuExpanded,
@@ -227,6 +232,13 @@ fun TopBar(
                         },
                         onClick = {
                             onToggleAmoled()
+                        }
+                    )
+                    DropdownMenuItem(
+                        text = { Text("How to Use (Guide)", color = RemoteTheme.colors.textPrimary) },
+                        onClick = {
+                            menuExpanded = false
+                            onTutorialClick()
                         }
                     )
                     DropdownMenuItem(

@@ -36,12 +36,15 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.positionChange
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.ryzen.tvremote.protocol.KeyDirection
 import com.ryzen.tvremote.protocol.RemoteKey
 import com.ryzen.tvremote.ui.theme.RemoteTheme
 import kotlinx.coroutines.Job
@@ -54,7 +57,7 @@ import kotlin.math.sqrt
 
 @Composable
 fun Trackpad(
-    onKey: (RemoteKey) -> Unit,
+    onKey: (RemoteKey, KeyDirection) -> Unit,
     modifier: Modifier = Modifier
 ) {
     val haptic = LocalHapticFeedback.current
@@ -63,17 +66,23 @@ fun Trackpad(
 
     val maxRadiusPx = with(density) { 95.dp.toPx() }
     val triggerThresholdPx = with(density) { 34.dp.toPx() }
+    val centerThresholdPx = with(density) { 48.dp.toPx() }
 
     val ballOffsetX = remember { Animatable(0f) }
     val ballOffsetY = remember { Animatable(0f) }
 
+    var boxSize by remember { mutableStateOf(IntSize.Zero) }
     var isDragging by remember { mutableStateOf(false) }
     var isPressed by remember { mutableStateOf(false) }
+    var isLongPressed by remember { mutableStateOf(false) }
+    var pressedArrow by remember { mutableStateOf<RemoteKey?>(null) }
+    var activeRepeatDirection by remember { mutableStateOf<RemoteKey?>(null) }
 
     val ballScale by animateFloatAsState(
         targetValue = when {
             isDragging -> 1.08f
-            isPressed -> 0.93f
+            isLongPressed -> 0.88f
+            isPressed -> 0.94f
             else -> 1.0f
         },
         animationSpec = spring(dampingRatio = 0.6f, stiffness = 800f),
@@ -91,13 +100,47 @@ fun Trackpad(
                     Modifier.border(1.5.dp, RemoteTheme.colors.trackpadBorder, RoundedCornerShape(44.dp))
                 } else Modifier
             )
+            .onSizeChanged { boxSize = it }
             .pointerInput(Unit) {
                 awaitEachGesture {
                     val down = awaitFirstDown(requireUnconsumed = false)
                     isPressed = true
                     var isDrag = false
-                    var activeRepeatDirection: RemoteKey? = null
                     var repeatJob: Job? = null
+                    var longPressJob: Job? = null
+                    var isLongPressActive = false
+
+                    val centerX = if (boxSize.width > 0) boxSize.width / 2f else 0f
+                    val centerY = if (boxSize.height > 0) boxSize.height / 2f else 0f
+                    val touchStartX = down.position.x
+                    val touchStartY = down.position.y
+                    val initialDxFromCenter = touchStartX - centerX
+                    val initialDyFromCenter = touchStartY - centerY
+                    val initialDistFromCenter = sqrt(initialDxFromCenter * initialDxFromCenter + initialDyFromCenter * initialDyFromCenter)
+
+                    val isTouchOnCenter = initialDistFromCenter <= centerThresholdPx
+
+                    if (isTouchOnCenter) {
+                        // Start long-press timer on OK button
+                        longPressJob = coroutineScope.launch {
+                            delay(400L)
+                            if (!isDrag && isActive) {
+                                isLongPressActive = true
+                                isLongPressed = true
+                                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                onKey(RemoteKey.DPAD_CENTER, KeyDirection.START_LONG)
+                            }
+                        }
+                    } else {
+                        // Highlight tapped arrow direction
+                        val initialTarget = if (abs(initialDxFromCenter) > abs(initialDyFromCenter)) {
+                            if (initialDxFromCenter > 0) RemoteKey.DPAD_RIGHT else RemoteKey.DPAD_LEFT
+                        } else {
+                            if (initialDyFromCenter > 0) RemoteKey.DPAD_DOWN else RemoteKey.DPAD_UP
+                        }
+                        pressedArrow = initialTarget
+                    }
+
                     var accumulatedX = 0f
                     var accumulatedY = 0f
                     val touchSlop = viewConfiguration.touchSlop
@@ -109,11 +152,30 @@ fun Trackpad(
 
                             if (!change.pressed) {
                                 change.consume()
-                                if (!isDrag) {
-                                    // Tap acts as DPAD Center / Select
-                                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                                    onKey(RemoteKey.DPAD_CENTER)
+                                longPressJob?.cancel()
+                                longPressJob = null
+
+                                if (isLongPressActive) {
+                                    onKey(RemoteKey.DPAD_CENTER, KeyDirection.END_LONG)
+                                    isLongPressActive = false
+                                    isLongPressed = false
+                                } else if (!isDrag) {
+                                    if (isTouchOnCenter) {
+                                        // Tap on center OK
+                                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                        onKey(RemoteKey.DPAD_CENTER, KeyDirection.SHORT)
+                                    } else {
+                                        // Tap on directional arrow
+                                        val tapDirection = if (abs(initialDxFromCenter) > abs(initialDyFromCenter)) {
+                                            if (initialDxFromCenter > 0) RemoteKey.DPAD_RIGHT else RemoteKey.DPAD_LEFT
+                                        } else {
+                                            if (initialDyFromCenter > 0) RemoteKey.DPAD_DOWN else RemoteKey.DPAD_UP
+                                        }
+                                        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                        onKey(tapDirection, KeyDirection.SHORT)
+                                    }
                                 }
+                                pressedArrow = null
                                 break
                             }
 
@@ -128,6 +190,14 @@ fun Trackpad(
                             if (!isDrag && distFromStart > touchSlop) {
                                 isDrag = true
                                 isDragging = true
+                                pressedArrow = null
+                                longPressJob?.cancel()
+                                longPressJob = null
+                                if (isLongPressActive) {
+                                    onKey(RemoteKey.DPAD_CENTER, KeyDirection.END_LONG)
+                                    isLongPressActive = false
+                                    isLongPressed = false
+                                }
                             }
 
                             if (isDrag) {
@@ -162,12 +232,12 @@ fun Trackpad(
                                         repeatJob?.cancel()
                                         repeatJob = coroutineScope.launch {
                                             haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                                            onKey(targetDirection)
+                                            onKey(targetDirection, KeyDirection.SHORT)
                                             delay(320L)
 
                                             while (isActive) {
                                                 haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                                                onKey(targetDirection)
+                                                onKey(targetDirection, KeyDirection.SHORT)
                                                 delay(175L)
                                             }
                                         }
@@ -180,6 +250,14 @@ fun Trackpad(
                             }
                         }
                     } finally {
+                        longPressJob?.cancel()
+                        longPressJob = null
+                        if (isLongPressActive) {
+                            onKey(RemoteKey.DPAD_CENTER, KeyDirection.END_LONG)
+                            isLongPressActive = false
+                            isLongPressed = false
+                        }
+                        pressedArrow = null
                         repeatJob?.cancel()
                         repeatJob = null
                         activeRepeatDirection = null
@@ -205,43 +283,60 @@ fun Trackpad(
             },
         contentAlignment = Alignment.Center
     ) {
-        // Faint Directional Guide Chevrons
-        val guideTint = Color.White.copy(alpha = 0.12f)
+        // Directional Guide Chevrons with interactive touch highlight
+        val baseGuideTint = RemoteTheme.colors.textSecondary.copy(alpha = 0.28f)
+        val activeGuideTint = RemoteTheme.colors.accentGreen
+
+        // Up Arrow
+        val isUpActive = pressedArrow == RemoteKey.DPAD_UP || activeRepeatDirection == RemoteKey.DPAD_UP
         Icon(
             imageVector = Icons.Default.KeyboardArrowUp,
-            contentDescription = null,
-            tint = guideTint,
+            contentDescription = "Up",
+            tint = if (isUpActive) activeGuideTint else baseGuideTint,
             modifier = Modifier
                 .align(Alignment.TopCenter)
                 .padding(top = 18.dp)
-                .size(28.dp)
+                .size(32.dp)
+                .scale(if (isUpActive) 1.2f else 1.0f)
         )
+
+        // Down Arrow
+        val isDownActive = pressedArrow == RemoteKey.DPAD_DOWN || activeRepeatDirection == RemoteKey.DPAD_DOWN
         Icon(
             imageVector = Icons.Default.KeyboardArrowDown,
-            contentDescription = null,
-            tint = guideTint,
+            contentDescription = "Down",
+            tint = if (isDownActive) activeGuideTint else baseGuideTint,
             modifier = Modifier
                 .align(Alignment.BottomCenter)
                 .padding(bottom = 18.dp)
-                .size(28.dp)
+                .size(32.dp)
+                .scale(if (isDownActive) 1.2f else 1.0f)
         )
+
+        // Left Arrow
+        val isLeftActive = pressedArrow == RemoteKey.DPAD_LEFT || activeRepeatDirection == RemoteKey.DPAD_LEFT
         Icon(
             imageVector = Icons.Default.KeyboardArrowLeft,
-            contentDescription = null,
-            tint = guideTint,
+            contentDescription = "Left",
+            tint = if (isLeftActive) activeGuideTint else baseGuideTint,
             modifier = Modifier
                 .align(Alignment.CenterStart)
                 .padding(start = 18.dp)
-                .size(28.dp)
+                .size(32.dp)
+                .scale(if (isLeftActive) 1.2f else 1.0f)
         )
+
+        // Right Arrow
+        val isRightActive = pressedArrow == RemoteKey.DPAD_RIGHT || activeRepeatDirection == RemoteKey.DPAD_RIGHT
         Icon(
             imageVector = Icons.Default.KeyboardArrowRight,
-            contentDescription = null,
-            tint = guideTint,
+            contentDescription = "Right",
+            tint = if (isRightActive) activeGuideTint else baseGuideTint,
             modifier = Modifier
                 .align(Alignment.CenterEnd)
                 .padding(end = 18.dp)
-                .size(28.dp)
+                .size(32.dp)
+                .scale(if (isRightActive) 1.2f else 1.0f)
         )
 
         // Center Thumbstick & D-pad Center Action

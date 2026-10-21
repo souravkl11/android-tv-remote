@@ -16,6 +16,12 @@ data class VolumeState(
     val isMuted: Boolean = false
 )
 
+enum class KeyDirection {
+    SHORT,
+    START_LONG,
+    END_LONG
+}
+
 interface IRemoteController {
     val status: StateFlow<ConnectionStatus>
     val volumeState: StateFlow<VolumeState>
@@ -25,7 +31,8 @@ interface IRemoteController {
     suspend fun finishPairing(pinCode: String)
     fun disconnect()
 
-    fun sendKey(key: RemoteKey)
+    fun sendKey(key: RemoteKey, direction: KeyDirection = KeyDirection.SHORT)
+    fun sendKey(key: RemoteKey) = sendKey(key, KeyDirection.SHORT)
     fun sendText(text: String)
     fun launchApp(appIdOrUrl: String)
 }

@@ -178,8 +178,12 @@ class AdbRemoteClient(
         }
     }
 
-    override fun sendKey(key: RemoteKey) {
-        sendShellCommand("input keyevent ${key.androidKeyCode}")
+    override fun sendKey(key: RemoteKey, direction: KeyDirection) {
+        when (direction) {
+            KeyDirection.SHORT -> sendShellCommand("input keyevent ${key.androidKeyCode}")
+            KeyDirection.START_LONG -> sendShellCommand("input keyevent --longpress ${key.androidKeyCode}")
+            KeyDirection.END_LONG -> { /* Handled via --longpress */ }
+        }
     }
 
     override fun sendText(text: String) {
