@@ -13,7 +13,8 @@ No ads, no tracking, and no bloat.
 - **Phone volume buttons**: Optionally control the TV volume with your phone's hardware keys.
 - **Keyboard input**: Type directly into TV search and input fields from your phone.
 - **Quick Settings tile**: Jump into the remote right from your Android notification shade.
-- **True AMOLED dark theme**: Pure black theme for OLED screens.
+- **Material 3 Expressive design**: Springy motion, shape-morphing buttons, a dot-field swipe pad and a volume rocker that shows the TV's level.
+- **Themes**: Light, dark or system, an optional pure black theme for OLED screens, and wallpaper colours on Android 12+.
 
 ## How to Connect
 
@@ -41,6 +42,8 @@ cd android-tv-remote
 The APK will be generated at `app/build/outputs/apk/debug/app-debug.apk`.
 
 ## Credits
+
+The v1.3.0 UI redesign was designed and built with Claude Fable 5.2 by Anthropic.
 
 App icons are from [Simple Icons](https://simpleicons.org) (CC0). The logos are trademarks of their respective owners and are used only to label app shortcuts.
 

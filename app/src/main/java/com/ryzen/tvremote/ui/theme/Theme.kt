@@ -1,40 +1,68 @@
 package com.ryzen.tvremote.ui.theme
 
+import android.os.Build
+import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.darkColorScheme
+import androidx.compose.material3.Shapes
+import androidx.compose.material3.dynamicDarkColorScheme
+import androidx.compose.material3.dynamicLightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.ReadOnlyComposable
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.unit.dp
+import com.ryzen.tvremote.ui.ThemeMode
+
+private val RemoteShapes = Shapes(
+    extraSmall = RoundedCornerShape(8.dp),
+    small = RoundedCornerShape(12.dp),
+    medium = RoundedCornerShape(18.dp),
+    large = RoundedCornerShape(24.dp),
+    extraLarge = RoundedCornerShape(32.dp)
+)
+
+/** True when wallpaper-based colours are available on this phone. */
+val supportsDynamicColor: Boolean get() = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
+
+@Composable
+fun isDarkTheme(mode: ThemeMode): Boolean = when (mode) {
+    ThemeMode.SYSTEM -> isSystemInDarkTheme()
+    ThemeMode.LIGHT -> false
+    ThemeMode.DARK -> true
+}
 
 @Composable
 fun TVRemoteTheme(
-    isAmoled: Boolean = false,
+    themeMode: ThemeMode = ThemeMode.DARK,
+    pureBlack: Boolean = false,
+    dynamicColor: Boolean = false,
     content: @Composable () -> Unit
 ) {
-    val colors = if (isAmoled) TrueAmoledColors else StandardDarkColors
+    val dark = isDarkTheme(themeMode)
+    val context = LocalContext.current
 
-    val colorScheme = darkColorScheme(
-        primary = colors.accent,
-        secondary = colors.trackpadDot,
-        tertiary = colors.buttonSurface,
-        background = colors.background,
-        surface = colors.cardSurface,
-        onPrimary = colors.background,
-        onSecondary = colors.background,
-        onBackground = colors.textPrimary,
-        onSurface = colors.textPrimary
-    )
+    var scheme = when {
+        dynamicColor && supportsDynamicColor ->
+            if (dark) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
+        dark -> BrandDarkScheme
+        else -> BrandLightScheme
+    }
+    if (dark && pureBlack) scheme = scheme.asPureBlack()
 
-    CompositionLocalProvider(LocalRemoteColors provides colors) {
+    CompositionLocalProvider(LocalStatusColors provides if (dark) DarkStatusColors else LightStatusColors) {
         MaterialTheme(
-            colorScheme = colorScheme,
-            typography = Typography,
+            colorScheme = scheme,
+            typography = RemoteTypography,
+            shapes = RemoteShapes,
             content = content
         )
     }
 }
 
 object RemoteTheme {
-    val colors: RemoteAppColors
+    val status: StatusColors
         @Composable
-        get() = LocalRemoteColors.current
+        @ReadOnlyComposable
+        get() = LocalStatusColors.current
 }

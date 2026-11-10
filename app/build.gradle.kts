@@ -13,13 +13,17 @@ android {
         applicationId = "com.ryzen.tvremote"
         minSdk = 24
         targetSdk = 37
-        versionCode = 3
-        versionName = "1.2.0"
+        versionCode = 4
+        versionName = "1.3.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
     buildTypes {
+        debug {
+            // Installs next to the signed release build instead of replacing it.
+            applicationIdSuffix = ".debug"
+        }
         release {
             isMinifyEnabled = false
             signingConfig = signingConfigs.getByName("debug")
@@ -46,6 +50,7 @@ dependencies {
     implementation(libs.androidx.lifecycle.runtime.ktx)
     implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.8.7")
     implementation("androidx.compose.material:material-icons-extended:1.7.8")
+    implementation("androidx.graphics:graphics-shapes:1.0.1")
     implementation("com.google.protobuf:protobuf-javalite:3.25.5")
     implementation("org.bouncycastle:bcprov-jdk18on:1.80")
     implementation("org.bouncycastle:bcpkix-jdk18on:1.80")

@@ -1,72 +1,136 @@
 package com.ryzen.tvremote.ui.components
 
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Gamepad
-import androidx.compose.material.icons.filled.Swipe
+import androidx.compose.material.icons.rounded.Gamepad
+import androidx.compose.material.icons.rounded.Swipe
 import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.semantics.Role
-import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import com.ryzen.tvremote.ui.ControlMode
-import com.ryzen.tvremote.ui.theme.RemoteTheme
+import com.ryzen.tvremote.ui.theme.Motion
 
-/** Compact segmented control: Swipe | D-pad. */
+data class SegmentOption<T>(val value: T, val label: String, val icon: ImageVector? = null)
+
+/** Segmented control whose highlight slides between options on a spring. */
+@Composable
+fun <T> SegmentedPills(
+    options: List<SegmentOption<T>>,
+    selected: T,
+    onSelect: (T) -> Unit,
+    modifier: Modifier = Modifier,
+    height: Dp = 48.dp,
+    trackColor: Color = MaterialTheme.colorScheme.surfaceContainer
+) {
+    val scheme = MaterialTheme.colorScheme
+    val haptic = rememberHaptic()
+    val index = options.indexOfFirst { it.value == selected }.coerceAtLeast(0)
+
+    BoxWithConstraints(
+        modifier = modifier
+            .height(height)
+            .clip(CircleShape)
+            .background(trackColor)
+            .padding(4.dp)
+    ) {
+        val segment = maxWidth / options.size
+        val x by animateDpAsState(segment * index, Motion.spatial(), label = "segmentX")
+
+        Box(
+            modifier = Modifier
+                .offset { IntOffset(x.roundToPx(), 0) }
+                .width(segment)
+                .fillMaxHeight()
+                .clip(CircleShape)
+                .background(scheme.secondaryContainer)
+        )
+
+        Row(modifier = Modifier.fillMaxSize().selectableGroup()) {
+            options.forEach { option ->
+                val isSelected = option.value == selected
+                val tint by animateColorAsState(
+                    targetValue = if (isSelected) scheme.onSecondaryContainer else scheme.onSurfaceVariant,
+                    animationSpec = Motion.effects(),
+                    label = "segmentTint"
+                )
+                Row(
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxHeight()
+                        .clip(CircleShape)
+                        .selectable(
+                            selected = isSelected,
+                            interactionSource = remember { MutableInteractionSource() },
+                            indication = null,
+                            role = Role.RadioButton
+                        ) {
+                            if (!isSelected) {
+                                haptic(HapticFeedbackType.TextHandleMove)
+                                onSelect(option.value)
+                            }
+                        },
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp, Alignment.CenterHorizontally)
+                ) {
+                    if (option.icon != null) {
+                        Icon(option.icon, contentDescription = null, tint = tint, modifier = Modifier.size(18.dp))
+                    }
+                    Text(option.label, color = tint, style = MaterialTheme.typography.labelLarge, maxLines = 1)
+                }
+            }
+        }
+    }
+}
+
+private val ModeOptions = listOf(
+    SegmentOption(ControlMode.SWIPE, "Swipe", Icons.Rounded.Swipe),
+    SegmentOption(ControlMode.DPAD, "D-pad", Icons.Rounded.Gamepad)
+)
+
+/** Swipe | D-pad. */
 @Composable
 fun ModeSwitch(
     mode: ControlMode,
     onModeChange: (ControlMode) -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    trackColor: Color = MaterialTheme.colorScheme.surfaceContainer
 ) {
-    Row(
-        modifier = modifier
-            .clip(CircleShape)
-            .background(RemoteTheme.colors.buttonSurface)
-            .padding(4.dp),
-        horizontalArrangement = Arrangement.spacedBy(4.dp)
-    ) {
-        Segment("Swipe", Icons.Default.Swipe, mode == ControlMode.SWIPE) { onModeChange(ControlMode.SWIPE) }
-        Segment("D-pad", Icons.Default.Gamepad, mode == ControlMode.DPAD) { onModeChange(ControlMode.DPAD) }
-    }
-}
-
-@Composable
-private fun Segment(label: String, icon: ImageVector, selected: Boolean, onClick: () -> Unit) {
-    val colors = RemoteTheme.colors
-    Row(
-        modifier = Modifier
-            .clip(CircleShape)
-            .background(if (selected) colors.accent.copy(alpha = 0.22f) else androidx.compose.ui.graphics.Color.Transparent)
-            .clickable(role = Role.RadioButton, onClick = onClick)
-            .padding(horizontal = 16.dp, vertical = 9.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Icon(
-            imageVector = icon,
-            contentDescription = null,
-            tint = if (selected) colors.accent else colors.textSecondary,
-            modifier = Modifier.size(18.dp)
-        )
-        Row(modifier = Modifier.width(6.dp)) {}
-        Text(
-            text = label,
-            color = if (selected) colors.textPrimary else colors.textSecondary,
-            fontSize = 13.sp,
-            fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal
-        )
-    }
+    SegmentedPills(
+        options = ModeOptions,
+        selected = mode,
+        onSelect = onModeChange,
+        modifier = modifier.width(232.dp),
+        height = 44.dp,
+        trackColor = trackColor
+    )
 }

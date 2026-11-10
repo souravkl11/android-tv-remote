@@ -25,6 +25,9 @@ import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.launch
 
 class MainViewModel(application: Application) : AndroidViewModel(application) {
@@ -40,6 +43,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         private const val KEY_CONTROL_MODE = "control_mode"
         private const val KEY_HAPTICS = "haptics_enabled"
         private const val KEY_VOLUME_KEYS = "volume_keys_control_tv"
+        private const val KEY_THEME_MODE = "theme_mode"
+        private const val KEY_DYNAMIC_COLOR = "dynamic_color"
         const val DEFAULT_IP = ""
         const val DEFAULT_NAME = "Android TV"
     }
@@ -56,6 +61,15 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val _isAmoledMode = MutableStateFlow(prefs.getBoolean(KEY_AMOLED_MODE, false))
     val isAmoledMode: StateFlow<Boolean> = _isAmoledMode.asStateFlow()
 
+    private val _themeMode = MutableStateFlow(
+        runCatching { ThemeMode.valueOf(prefs.getString(KEY_THEME_MODE, null) ?: "") }
+            .getOrDefault(ThemeMode.DARK)
+    )
+    val themeMode: StateFlow<ThemeMode> = _themeMode.asStateFlow()
+
+    private val _dynamicColor = MutableStateFlow(prefs.getBoolean(KEY_DYNAMIC_COLOR, false))
+    val dynamicColor: StateFlow<Boolean> = _dynamicColor.asStateFlow()
+
     private val _controlMode = MutableStateFlow(
         runCatching { ControlMode.valueOf(prefs.getString(KEY_CONTROL_MODE, null) ?: "") }
             .getOrDefault(ControlMode.SWIPE)
@@ -70,14 +84,24 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     // ---- UI state ----------------------------------------------------------------------------
 
-    val showTutorial = MutableStateFlow(!prefs.getBoolean(KEY_TUTORIAL_SEEN, false))
+    /** The quick tour opens by itself once, the first time a TV connects. */
+    val showTutorial = MutableStateFlow(false)
     val availableUpdate = MutableStateFlow<AppUpdateInfo?>(null)
 
     private val _toastEvent = MutableSharedFlow<String>(extraBufferCapacity = 4)
     val toastEvent: SharedFlow<String> = _toastEvent.asSharedFlow()
 
-    val connectionStatus: StateFlow<ConnectionStatus> = client.status
-    val volumeState: StateFlow<VolumeState> = client.volumeState
+    /** Debug builds only: a pretend connection state so the UI can be reviewed without a TV. */
+    private val demoStatus = MutableStateFlow<ConnectionStatus?>(null)
+
+    val connectionStatus: StateFlow<ConnectionStatus> =
+        combine(client.status, demoStatus) { real, demo -> demo ?: real }
+            .stateIn(viewModelScope, SharingStarted.Eagerly, client.status.value)
+
+    val volumeState: StateFlow<VolumeState> =
+        combine(client.volumeState, demoStatus) { real, demo ->
+            if (demo is ConnectionStatus.Connected) VolumeState(level = 14, max = 40) else real
+        }.stateIn(viewModelScope, SharingStarted.Eagerly, client.volumeState.value)
 
     val appShortcuts: StateFlow<List<AppShortcut>> = shortcutRepo.shortcuts
 
@@ -100,13 +124,14 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     init {
         viewModelScope.launch {
-            client.status.collect { status ->
+            connectionStatus.collect { status ->
                 if (status is ConnectionStatus.NeedsPairing) {
                     showPinDialog.value = true
                 } else if (status is ConnectionStatus.Connected) {
                     // The client can't reliably read the TV's name, so keep the name we already
                     // have (from discovery, or the IP for manual connections).
                     showPinDialog.value = false
+                    if (!prefs.getBoolean(KEY_TUTORIAL_SEEN, false)) showTutorial.value = true
                 }
             }
         }
@@ -224,13 +249,18 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun sendText(text: String) = client.sendText(text)
 
+    /** Shows a short message at the bottom of the pad. */
+    fun notify(message: String) {
+        _toastEvent.tryEmit(message)
+    }
+
     fun launchApp(shortcut: AppShortcut) {
         if (connectionStatus.value !is ConnectionStatus.Connected) {
             _toastEvent.tryEmit("Not connected to a TV")
             return
         }
         client.launchApp(shortcut.launchTarget)
-        _toastEvent.tryEmit("Opening ${shortcut.name} on TV…")
+        _toastEvent.tryEmit("Opening ${shortcut.name}")
     }
 
     // ---- App shortcuts -----------------------------------------------------------------------
@@ -245,6 +275,67 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun setControlMode(mode: ControlMode) {
         _controlMode.value = mode
         prefs.edit().putString(KEY_CONTROL_MODE, mode.name).apply()
+    }
+
+    fun setThemeMode(mode: ThemeMode) {
+        _themeMode.value = mode
+        prefs.edit().putString(KEY_THEME_MODE, mode.name).apply()
+    }
+
+    fun setDynamicColor(enabled: Boolean) {
+        _dynamicColor.value = enabled
+        prefs.edit().putBoolean(KEY_DYNAMIC_COLOR, enabled).apply()
+    }
+
+    fun setDemo(state: String?) {
+        if (!BuildConfig.DEBUG || state == null) return
+        if (_currentIp.value.isEmpty()) {
+            // Not persisted: just gives the demo a TV to talk about.
+            _currentIp.value = "192.168.1.20"
+            _currentName.value = "Living Room TV"
+        }
+        val name = _currentName.value
+        demoStatus.value = when (state) {
+            "connected" -> ConnectionStatus.Connected("demo", name)
+            "connecting" -> ConnectionStatus.Connecting("Connecting…")
+            "pairing" -> ConnectionStatus.NeedsPairing()
+            "error" -> ConnectionStatus.Error("Demo error")
+            "idle" -> ConnectionStatus.Disconnected
+            else -> null
+        }
+    }
+
+    /** Debug builds only: opens a sheet directly, for UI review over adb. */
+    fun debugOpen(what: String?) {
+        if (!BuildConfig.DEBUG || what == null) return
+        viewModelScope.launch {
+            delay(1200L) // let the start-up connection logic settle first
+            debugOpenNow(what)
+        }
+    }
+
+    private fun debugOpenNow(what: String) {
+        when (what) {
+            "settings" -> showSettings.value = true
+            "picker" -> showDevicePicker.value = true
+            "pairing" -> showPinDialog.value = true
+            "tour" -> showTutorial.value = true
+            "typing" -> isTyping.value = true
+            "update" -> availableUpdate.value = AppUpdateInfo(
+                latestVersion = "1.3.0",
+                releaseNotes = "Fresh Material 3 Expressive design, a light theme and a new swipe pad.",
+                releaseUrl = "https://example.com",
+                apkDownloadUrl = null
+            )
+            "close" -> {
+                showSettings.value = false
+                showDevicePicker.value = false
+                showPinDialog.value = false
+                showTutorial.value = false
+                isTyping.value = false
+                availableUpdate.value = null
+            }
+        }
     }
 
     fun setAmoledMode(enabled: Boolean) {
@@ -285,7 +376,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     availableUpdate.value = update
                 }
             } else if (manual) {
-                _toastEvent.emit("You are on the latest version (v$currentVersion)")
+                _toastEvent.emit("You're up to date (v$currentVersion)")
             }
         }
     }

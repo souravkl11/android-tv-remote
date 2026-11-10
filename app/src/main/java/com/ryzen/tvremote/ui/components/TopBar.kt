@@ -1,125 +1,174 @@
 package com.ryzen.tvremote.ui.components
 
-import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.KeyboardArrowDown
-import androidx.compose.material.icons.filled.PowerSettingsNew
-import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.rounded.PowerSettingsNew
+import androidx.compose.material.icons.rounded.Settings
+import androidx.compose.material.icons.rounded.Tv
+import androidx.compose.material.icons.rounded.TvOff
+import androidx.compose.material.icons.rounded.UnfoldMore
 import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.semantics.Role
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import com.ryzen.tvremote.protocol.ConnectionStatus
+import com.ryzen.tvremote.ui.theme.Motion
 import com.ryzen.tvremote.ui.theme.RemoteTheme
 
 @Composable
 fun TopBar(
     status: ConnectionStatus,
     deviceName: String,
+    hasTv: Boolean,
     onDevicePickerClick: () -> Unit,
     onPowerClick: () -> Unit,
     onSettingsClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val colors = RemoteTheme.colors
-    val dotColor = when (status) {
-        is ConnectionStatus.Connected -> colors.accent
-        is ConnectionStatus.Connecting, is ConnectionStatus.NeedsPairing -> colors.warning
-        is ConnectionStatus.Error -> colors.red
-        is ConnectionStatus.Disconnected -> colors.textSecondary
-    }
+    val scheme = MaterialTheme.colorScheme
+    val connected = status is ConnectionStatus.Connected
+
     val statusLabel = when (status) {
         is ConnectionStatus.Connected -> "Connected"
         is ConnectionStatus.Connecting -> "Connecting…"
-        is ConnectionStatus.NeedsPairing -> "Pairing"
-        is ConnectionStatus.Error -> "Offline"
-        is ConnectionStatus.Disconnected -> "Not connected"
+        is ConnectionStatus.NeedsPairing -> "Waiting for code"
+        is ConnectionStatus.Error -> "Can't connect"
+        is ConnectionStatus.Disconnected -> if (hasTv) "Not connected" else "Tap to choose"
     }
+    val statusColor by animateColorAsState(
+        targetValue = when (status) {
+            is ConnectionStatus.Connected -> RemoteTheme.status.success
+            is ConnectionStatus.Connecting, is ConnectionStatus.NeedsPairing -> RemoteTheme.status.warning
+            is ConnectionStatus.Error -> scheme.error
+            is ConnectionStatus.Disconnected -> scheme.onSurfaceVariant
+        },
+        animationSpec = Motion.effects(),
+        label = "statusColor"
+    )
 
     Row(
         modifier = modifier
             .fillMaxWidth()
             .padding(horizontal = 16.dp, vertical = 8.dp),
-        horizontalArrangement = Arrangement.SpaceBetween,
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        // Device chip: tap to pick a TV.
-        Row(
+        PressSurface(
+            onClick = onDevicePickerClick,
             modifier = Modifier
-                .weight(1f, fill = false)
-                .heightIn(min = 48.dp)
-                .clip(CircleShape)
-                .background(colors.buttonSurface)
-                .clickable(role = Role.Button, onClickLabel = "Choose TV", onClick = onDevicePickerClick)
-                .padding(start = 16.dp, end = 10.dp),
-            verticalAlignment = Alignment.CenterVertically
+                .weight(1f)
+                .height(60.dp),
+            description = "Choose TV. ${if (hasTv) deviceName else "No TV"}, $statusLabel"
         ) {
-            Box(
+            Row(
                 modifier = Modifier
-                    .size(10.dp)
-                    .clip(CircleShape)
-                    .background(dotColor)
-            )
-            Spacer(Modifier.width(10.dp))
-            Column(modifier = Modifier.weight(1f, fill = false)) {
-                Text(
-                    text = deviceName,
-                    color = colors.textPrimary,
-                    fontSize = 15.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-                Text(
-                    text = statusLabel,
-                    color = colors.textSecondary,
-                    fontSize = 11.sp,
-                    maxLines = 1
+                    .fillMaxSize()
+                    .padding(start = 9.dp, end = 14.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                StatusBadge(status)
+                Spacer(Modifier.width(12.dp))
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = if (hasTv) deviceName else "No TV yet",
+                        style = MaterialTheme.typography.titleMedium,
+                        color = scheme.onSurface,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    Text(
+                        text = statusLabel,
+                        style = MaterialTheme.typography.labelMedium,
+                        color = statusColor,
+                        maxLines = 1
+                    )
+                }
+                Icon(
+                    imageVector = Icons.Rounded.UnfoldMore,
+                    contentDescription = null,
+                    tint = scheme.onSurfaceVariant,
+                    modifier = Modifier.size(20.dp)
                 )
             }
-            Spacer(Modifier.width(4.dp))
-            Icon(
-                imageVector = Icons.Default.KeyboardArrowDown,
-                contentDescription = null,
-                tint = colors.textSecondary,
-                modifier = Modifier.size(22.dp)
-            )
         }
 
-        Spacer(Modifier.width(12.dp))
+        IconSurface(
+            icon = Icons.Rounded.PowerSettingsNew,
+            description = "Power",
+            onClick = onPowerClick,
+            size = 60.dp,
+            iconSize = 26.dp,
+            color = scheme.errorContainer,
+            contentColor = scheme.onErrorContainer,
+            enabled = connected
+        )
+        IconSurface(
+            icon = Icons.Rounded.Settings,
+            description = "Settings",
+            onClick = onSettingsClick,
+            size = 60.dp,
+            iconSize = 24.dp
+        )
+    }
+}
 
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-            RoundButton(
-                icon = Icons.Default.PowerSettingsNew,
-                description = "Power",
-                onClick = onPowerClick,
-                size = 48.dp,
-                tint = colors.red
-            )
-            RoundButton(
-                icon = Icons.Default.Settings,
-                description = "Settings",
-                onClick = onSettingsClick,
-                size = 48.dp
+/** Circle that blooms into a cookie when the TV connects; a tumbling loader while it tries. */
+@Composable
+private fun StatusBadge(status: ConnectionStatus) {
+    val scheme = MaterialTheme.colorScheme
+    val connected = status is ConnectionStatus.Connected
+    val busy = status is ConnectionStatus.Connecting || status is ConnectionStatus.NeedsPairing
+    val isError = status is ConnectionStatus.Error
+
+    val bloom = animateFloatAsState(if (connected) 1f else 0f, Motion.spatial(), label = "bloom")
+    val container by animateColorAsState(
+        targetValue = when {
+            connected -> RemoteTheme.status.success
+            isError -> scheme.errorContainer
+            else -> scheme.surfaceContainerHighest
+        },
+        animationSpec = Motion.effects(),
+        label = "badgeColor"
+    )
+    val tint = when {
+        connected -> RemoteTheme.status.onSuccess
+        isError -> scheme.onErrorContainer
+        else -> scheme.onSurfaceVariant
+    }
+
+    MorphBox(
+        from = Polygons.Circle,
+        to = Polygons.Cookie,
+        progress = { bloom.value },
+        rotation = { bloom.value * 45f },
+        color = container,
+        modifier = Modifier.size(42.dp)
+    ) {
+        if (busy) {
+            LoadingMorph(color = RemoteTheme.status.warning, size = 22.dp)
+        } else {
+            Icon(
+                imageVector = if (isError) Icons.Rounded.TvOff else Icons.Rounded.Tv,
+                contentDescription = null,
+                tint = tint,
+                modifier = Modifier.size(20.dp)
             )
         }
     }

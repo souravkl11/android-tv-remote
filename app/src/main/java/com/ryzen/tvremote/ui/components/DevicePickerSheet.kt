@@ -1,38 +1,25 @@
 package com.ryzen.tvremote.ui.components
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.imePadding
-import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.Refresh
-import androidx.compose.material.icons.outlined.Tv
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material.icons.automirrored.rounded.ArrowForward
+import androidx.compose.material.icons.rounded.CheckCircle
+import androidx.compose.material.icons.rounded.Refresh
+import androidx.compose.material.icons.rounded.Tv
+import androidx.compose.material.icons.rounded.WifiFind
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
-import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -41,16 +28,12 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.semantics.Role
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import com.ryzen.tvremote.protocol.DiscoveredDevice
 import com.ryzen.tvremote.ui.theme.RemoteTheme
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun DevicePickerSheet(
     currentIp: String,
@@ -61,111 +44,90 @@ fun DevicePickerSheet(
     onConnect: (ip: String, name: String?) -> Unit,
     onDismiss: () -> Unit
 ) {
-    val colors = RemoteTheme.colors
+    val scheme = MaterialTheme.colorScheme
     var ipInput by remember { mutableStateOf(currentIp) }
 
-    ModalBottomSheet(
-        onDismissRequest = onDismiss,
-        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
-        containerColor = colors.cardSurface
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .verticalScroll(rememberScrollState())
-                .imePadding()
-                .navigationBarsPadding()
-                .padding(horizontal = 20.dp)
-                .padding(bottom = 16.dp)
-        ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text("Choose your TV", color = colors.textPrimary, fontSize = 20.sp, fontWeight = FontWeight.Bold)
-                if (isScanning) {
-                    CircularProgressIndicator(
-                        modifier = Modifier.size(22.dp).padding(2.dp),
-                        color = colors.accent,
-                        strokeWidth = 2.dp
-                    )
-                } else {
-                    IconButton(onClick = onScanClick) {
-                        Icon(Icons.Default.Refresh, contentDescription = "Scan again", tint = colors.accent)
-                    }
+    RemoteSheet(
+        title = "Choose your TV",
+        subtitle = if (isScanning) "Looking on your Wi-Fi…" else "TVs on your Wi-Fi",
+        onDismiss = onDismiss,
+        action = {
+            if (isScanning) {
+                Box(Modifier.size(52.dp), contentAlignment = Alignment.Center) {
+                    LoadingMorph(color = scheme.primary, size = 32.dp)
                 }
-            }
-            Spacer(Modifier.height(4.dp))
-            Text(
-                text = if (isScanning) "Looking for TVs on your Wi-Fi…" else "TVs found on your Wi-Fi",
-                color = colors.textSecondary,
-                fontSize = 13.sp
-            )
-            Spacer(Modifier.height(12.dp))
-
-            if (discoveredDevices.isEmpty()) {
-                Text(
-                    text = if (isScanning) "Searching…" else "No TVs found. Make sure the TV is on and on the same Wi-Fi, or enter its IP below.",
-                    color = colors.textSecondary,
-                    fontSize = 13.sp,
-                    modifier = Modifier.padding(vertical = 8.dp)
-                )
             } else {
-                discoveredDevices.forEach { device ->
+                IconSurface(Icons.Rounded.Refresh, "Scan again", onScanClick, color = scheme.surfaceContainerHighest)
+            }
+        }
+    ) {
+        if (discoveredDevices.isEmpty()) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(24.dp))
+                    .background(scheme.surfaceContainerHigh)
+                    .padding(18.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(14.dp)
+            ) {
+                Icon(Icons.Rounded.WifiFind, null, tint = scheme.onSurfaceVariant, modifier = Modifier.size(28.dp))
+                Text(
+                    text = if (isScanning) "Searching for TVs…"
+                    else "No TVs found. Check that the TV is on and on the same Wi-Fi as this phone, or enter its IP address below.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = scheme.onSurfaceVariant
+                )
+            }
+        } else {
+            Group {
+                discoveredDevices.forEachIndexed { i, device ->
                     val isConnected = device.host == connectedIp
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(vertical = 4.dp)
-                            .clip(RoundedCornerShape(16.dp))
-                            .background(colors.buttonSurface)
-                            .clickable(role = Role.Button) { onConnect(device.host, device.name) }
-                            .padding(horizontal = 14.dp, vertical = 12.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Icon(Icons.Outlined.Tv, contentDescription = null, tint = colors.accent, modifier = Modifier.size(22.dp))
-                        Spacer(Modifier.width(12.dp))
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(device.name, color = colors.textPrimary, fontSize = 15.sp, fontWeight = FontWeight.Medium)
-                            Text(device.host, color = colors.textSecondary, fontSize = 12.sp)
+                    GroupRow(
+                        index = i,
+                        count = discoveredDevices.size,
+                        title = device.name,
+                        subtitle = if (isConnected) "Connected · ${device.host}" else device.host,
+                        icon = Icons.Rounded.Tv,
+                        iconBackground = if (isConnected) RemoteTheme.status.success else scheme.secondaryContainer,
+                        iconTint = if (isConnected) RemoteTheme.status.onSuccess else scheme.onSecondaryContainer,
+                        onClick = { onConnect(device.host, device.name) },
+                        trailing = {
+                            if (isConnected) {
+                                Icon(
+                                    Icons.Rounded.CheckCircle,
+                                    contentDescription = "Connected",
+                                    tint = RemoteTheme.status.success,
+                                    modifier = Modifier.size(24.dp)
+                                )
+                            }
                         }
-                        if (isConnected) {
-                            Icon(Icons.Default.Check, contentDescription = "Connected", tint = colors.accent, modifier = Modifier.size(20.dp))
-                        }
-                    }
+                    )
                 }
             }
+        }
 
-            Spacer(Modifier.height(20.dp))
-            Text("Or enter an IP address", color = colors.textSecondary, fontSize = 13.sp)
-            Spacer(Modifier.height(8.dp))
+        SectionLabel("Connect by IP address")
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             OutlinedTextField(
                 value = ipInput,
                 onValueChange = { ipInput = it.trim() },
                 singleLine = true,
-                placeholder = { Text("192.168.1.100", color = colors.textSecondary) },
-                colors = OutlinedTextFieldDefaults.colors(
-                    focusedBorderColor = colors.accent,
-                    unfocusedBorderColor = colors.divider,
-                    focusedTextColor = colors.textPrimary,
-                    unfocusedTextColor = colors.textPrimary,
-                    cursorColor = colors.accent
-                ),
+                placeholder = { Text("192.168.1.100") },
+                shape = RoundedCornerShape(50),
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri, imeAction = ImeAction.Go),
                 keyboardActions = KeyboardActions(onGo = { if (ipInput.isNotEmpty()) onConnect(ipInput, null) }),
-                modifier = Modifier.fillMaxWidth()
+                modifier = Modifier.weight(1f)
             )
-            Spacer(Modifier.height(12.dp))
-            Button(
+            IconSurface(
+                icon = Icons.AutoMirrored.Rounded.ArrowForward,
+                description = "Connect",
                 onClick = { onConnect(ipInput, null) },
                 enabled = ipInput.isNotEmpty(),
-                colors = ButtonDefaults.buttonColors(containerColor = colors.accent, contentColor = colors.background),
-                shape = RoundedCornerShape(14.dp),
-                modifier = Modifier.fillMaxWidth().height(48.dp)
-            ) {
-                Text("Connect", fontWeight = FontWeight.SemiBold)
-            }
+                size = 56.dp,
+                color = scheme.primary,
+                contentColor = scheme.onPrimary
+            )
         }
     }
 }

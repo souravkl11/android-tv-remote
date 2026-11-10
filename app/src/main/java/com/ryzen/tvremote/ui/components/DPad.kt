@@ -1,9 +1,8 @@
 package com.ryzen.tvremote.ui.components
 
+import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.spring
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.layout.Box
@@ -11,11 +10,12 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.KeyboardArrowDown
-import androidx.compose.material.icons.filled.KeyboardArrowLeft
-import androidx.compose.material.icons.filled.KeyboardArrowRight
-import androidx.compose.material.icons.filled.KeyboardArrowUp
+import androidx.compose.material.icons.rounded.KeyboardArrowDown
+import androidx.compose.material.icons.rounded.KeyboardArrowLeft
+import androidx.compose.material.icons.rounded.KeyboardArrowRight
+import androidx.compose.material.icons.rounded.KeyboardArrowUp
 import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -27,11 +27,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
-import androidx.compose.ui.draw.scale
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.pointerInput
@@ -43,13 +42,15 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.ryzen.tvremote.protocol.KeyDirection
 import com.ryzen.tvremote.protocol.RemoteKey
-import com.ryzen.tvremote.ui.theme.RemoteTheme
+import com.ryzen.tvremote.ui.theme.Motion
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
+private val OkSize = 112.dp
+
 /**
- * D-pad mode: a classic ring with four arrow segments and a centre OK button.
+ * D-pad mode: a ring with four arrow segments and a cookie-shaped OK button in the middle.
  * Tap an arrow to step, hold it to repeat. Tap OK to select, hold OK to long-press.
  */
 @Composable
@@ -59,53 +60,71 @@ fun DPad(
 ) {
     val haptic = rememberHaptic()
     val scope = rememberCoroutineScope()
-    val okRadiusPx = with(LocalDensity.current) { 46.dp.toPx() }
+    val okRadiusPx = with(LocalDensity.current) { (OkSize / 2).toPx() }
 
     var pressed by remember { mutableStateOf<RemoteKey?>(null) }
     var okLong by remember { mutableStateOf(false) }
 
-    val colors = RemoteTheme.colors
-    val okScale by animateFloatAsState(
+    val scheme = MaterialTheme.colorScheme
+    val okDown = pressed == RemoteKey.DPAD_CENTER
+
+    // OK: cookie relaxes into a circle, shrinks and twists while held.
+    val okMorph = animateFloatAsState(if (okDown) 1f else 0f, Motion.fastSpatial(), label = "okMorph")
+    val okScale = animateFloatAsState(
         targetValue = when {
-            okLong -> 0.88f
-            pressed == RemoteKey.DPAD_CENTER -> 0.94f
+            okLong -> 0.84f
+            okDown -> 0.92f
             else -> 1f
         },
-        animationSpec = spring(dampingRatio = 0.6f, stiffness = 800f),
+        animationSpec = Motion.fastSpatial(),
         label = "okScale"
     )
+    val okColor by animateColorAsState(
+        targetValue = if (okLong) scheme.tertiary else scheme.primary,
+        animationSpec = Motion.effects(),
+        label = "okColor"
+    )
+    val segmentGlow = animateFloatAsState(
+        targetValue = if (pressed != null && !okDown) 1f else 0f,
+        animationSpec = Motion.effects(),
+        label = "segmentGlow"
+    )
+    var lastSegment by remember { mutableStateOf(RemoteKey.DPAD_UP) }
+    if (pressed != null && !okDown) lastSegment = pressed!!
+
+    val highlight = scheme.primary
 
     Box(
         modifier = modifier
             .clip(CircleShape)
-            .background(colors.trackpadSurface)
-            .then(
-                if (colors.trackpadBorder != Color.Transparent)
-                    Modifier.border(1.5.dp, colors.trackpadBorder, CircleShape)
-                else Modifier
-            )
+            .background(scheme.surfaceContainerLow)
             .semantics { contentDescription = "Directional pad" }
             .drawBehind {
-                val zone = pressed
-                val startAngle = when (zone) {
-                    RemoteKey.DPAD_RIGHT -> -45f
-                    RemoteKey.DPAD_DOWN -> 45f
-                    RemoteKey.DPAD_LEFT -> 135f
-                    RemoteKey.DPAD_UP -> 225f
-                    else -> null
-                }
-                if (startAngle != null) {
-                    val outer = size.minDimension / 2f
-                    val mid = (outer + okRadiusPx) / 2f
-                    val c = Offset(size.width / 2f, size.height / 2f)
+                val outer = size.minDimension / 2f
+                val c = Offset(size.width / 2f, size.height / 2f)
+                val gap = 10.dp.toPx()
+                val inner = okRadiusPx + gap
+
+                // Well around the OK button.
+                drawCircle(scheme.surfaceContainerHigh, radius = inner, center = c)
+
+                val glow = segmentGlow.value
+                if (glow > 0.01f) {
+                    val startAngle = when (lastSegment) {
+                        RemoteKey.DPAD_RIGHT -> -45f
+                        RemoteKey.DPAD_DOWN -> 45f
+                        RemoteKey.DPAD_LEFT -> 135f
+                        else -> 225f
+                    }
+                    val mid = (outer + inner) / 2f
                     drawArc(
-                        color = colors.accent.copy(alpha = 0.28f),
-                        startAngle = startAngle,
-                        sweepAngle = 90f,
+                        color = highlight.copy(alpha = 0.20f * glow),
+                        startAngle = startAngle + 3f,
+                        sweepAngle = 84f,
                         useCenter = false,
                         topLeft = Offset(c.x - mid, c.y - mid),
                         size = Size(mid * 2, mid * 2),
-                        style = Stroke(width = outer - okRadiusPx)
+                        style = Stroke(width = outer - inner - gap)
                     )
                 }
             }
@@ -166,23 +185,28 @@ fun DPad(
             },
         contentAlignment = Alignment.Center
     ) {
-        Chevron(Icons.Default.KeyboardArrowUp, "Up", pressed == RemoteKey.DPAD_UP, Modifier.align(Alignment.TopCenter))
-        Chevron(Icons.Default.KeyboardArrowDown, "Down", pressed == RemoteKey.DPAD_DOWN, Modifier.align(Alignment.BottomCenter))
-        Chevron(Icons.Default.KeyboardArrowLeft, "Left", pressed == RemoteKey.DPAD_LEFT, Modifier.align(Alignment.CenterStart))
-        Chevron(Icons.Default.KeyboardArrowRight, "Right", pressed == RemoteKey.DPAD_RIGHT, Modifier.align(Alignment.CenterEnd))
+        Chevron(Icons.Rounded.KeyboardArrowUp, "Up", pressed == RemoteKey.DPAD_UP, Modifier.align(Alignment.TopCenter))
+        Chevron(Icons.Rounded.KeyboardArrowDown, "Down", pressed == RemoteKey.DPAD_DOWN, Modifier.align(Alignment.BottomCenter))
+        Chevron(Icons.Rounded.KeyboardArrowLeft, "Left", pressed == RemoteKey.DPAD_LEFT, Modifier.align(Alignment.CenterStart))
+        Chevron(Icons.Rounded.KeyboardArrowRight, "Right", pressed == RemoteKey.DPAD_RIGHT, Modifier.align(Alignment.CenterEnd))
 
-        Box(
+        MorphBox(
+            from = Polygons.Cookie,
+            to = Polygons.Circle,
+            progress = { okMorph.value },
+            rotation = { okMorph.value * 22.5f },
+            color = okColor,
             modifier = Modifier
-                .size(92.dp)
-                .scale(okScale)
-                .clip(CircleShape)
-                .background(colors.trackpadDot),
-            contentAlignment = Alignment.Center
+                .size(OkSize)
+                .graphicsLayer {
+                    scaleX = okScale.value
+                    scaleY = okScale.value
+                }
         ) {
             Text(
                 text = "OK",
-                color = Color(0xFF1E2025),
-                fontSize = 20.sp,
+                color = scheme.onPrimary,
+                fontSize = 24.sp,
                 fontWeight = FontWeight.Bold,
                 letterSpacing = 0.5.sp
             )
@@ -192,13 +216,24 @@ fun DPad(
 
 @Composable
 private fun Chevron(icon: ImageVector, description: String, active: Boolean, modifier: Modifier) {
+    val scheme = MaterialTheme.colorScheme
+    val amount = animateFloatAsState(if (active) 1f else 0f, Motion.fastSpatial(), label = "chevron")
+    val tint by animateColorAsState(
+        targetValue = if (active) scheme.primary else scheme.onSurfaceVariant,
+        animationSpec = Motion.effects(),
+        label = "chevronTint"
+    )
     Icon(
         imageVector = icon,
         contentDescription = description,
-        tint = if (active) RemoteTheme.colors.accent else RemoteTheme.colors.textSecondary.copy(alpha = 0.6f),
+        tint = tint,
         modifier = modifier
-            .padding(14.dp)
+            .padding(16.dp)
             .size(40.dp)
-            .scale(if (active) 1.2f else 1f)
+            .graphicsLayer {
+                val s = 1f + 0.25f * amount.value
+                scaleX = s
+                scaleY = s
+            }
     )
 }
