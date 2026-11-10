@@ -1,0 +1,4 @@
+version: 1
+bundleID: com.example.TVRemote
+infoPath: Info.plist
+iconPath: Icon.png
