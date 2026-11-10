@@ -13,7 +13,7 @@ fun TVRemoteTheme(
     val colors = if (isAmoled) TrueAmoledColors else StandardDarkColors
 
     val colorScheme = darkColorScheme(
-        primary = colors.accentGreen,
+        primary = colors.accent,
         secondary = colors.trackpadDot,
         tertiary = colors.buttonSurface,
         background = colors.background,

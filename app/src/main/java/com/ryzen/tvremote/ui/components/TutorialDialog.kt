@@ -17,8 +17,9 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Keyboard
-import androidx.compose.material.icons.filled.Navigation
-import androidx.compose.material.icons.filled.TouchApp
+import androidx.compose.material.icons.filled.Apps
+import androidx.compose.material.icons.filled.Gamepad
+import androidx.compose.material.icons.filled.Swipe
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -49,7 +50,7 @@ fun TutorialDialog(
                 Icon(
                     imageVector = Icons.Default.Info,
                     contentDescription = null,
-                    tint = RemoteTheme.colors.accentGreen,
+                    tint = RemoteTheme.colors.accent,
                     modifier = Modifier.size(24.dp)
                 )
                 Text(
@@ -68,21 +69,27 @@ fun TutorialDialog(
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
                 TutorialItem(
-                    icon = Icons.Default.Navigation,
-                    title = "Directional Navigation",
-                    description = "Swipe and hold the center trackpad to glide across items, or tap the arrows directly to move step-by-step."
+                    icon = Icons.Default.Swipe,
+                    title = "Swipe mode (default)",
+                    description = "Swipe anywhere on the pad to move. Keep your finger down after a swipe to keep scrolling. Tap to select, press and hold for context menus."
                 )
 
                 TutorialItem(
-                    icon = Icons.Default.TouchApp,
-                    title = "OK & Press-and-Hold",
-                    description = "Tap the center OK button to select. Press and hold OK to open context menus (add to watchlist, move apps, and options)."
+                    icon = Icons.Default.Gamepad,
+                    title = "D-pad mode",
+                    description = "Prefer buttons? Switch to D-pad with the toggle above the pad. Tap or hold an arrow to move, tap OK to select."
+                )
+
+                TutorialItem(
+                    icon = Icons.Default.Apps,
+                    title = "App shortcuts",
+                    description = "Tap an app at the top to open it on your TV. Tap + to add more, or press and hold an app to edit, reorder or remove it."
                 )
 
                 TutorialItem(
                     icon = Icons.Default.Keyboard,
-                    title = "Live Text Input",
-                    description = "Tap the keyboard icon in the top bar to type searches and passwords directly into your TV in real-time."
+                    title = "Type on TV",
+                    description = "Tap Type in the bottom row to enter searches and passwords from your phone keyboard."
                 )
             }
         },
@@ -90,7 +97,7 @@ fun TutorialDialog(
             Button(
                 onClick = onDismiss,
                 colors = ButtonDefaults.buttonColors(
-                    containerColor = RemoteTheme.colors.accentGreen,
+                    containerColor = RemoteTheme.colors.accent,
                     contentColor = RemoteTheme.colors.background
                 ),
                 shape = RoundedCornerShape(12.dp),
@@ -128,7 +135,7 @@ private fun TutorialItem(
             Icon(
                 imageVector = icon,
                 contentDescription = null,
-                tint = RemoteTheme.colors.accentGreen,
+                tint = RemoteTheme.colors.accent,
                 modifier = Modifier.size(18.dp)
             )
         }

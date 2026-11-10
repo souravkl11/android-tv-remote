@@ -6,12 +6,13 @@ import android.content.SharedPreferences
 import android.util.Log
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
-import com.ryzen.tvremote.protocol.AdbRemoteClient
+import com.ryzen.tvremote.BuildConfig
+import com.ryzen.tvremote.apps.AppShortcut
+import com.ryzen.tvremote.apps.AppShortcutRepository
 import com.ryzen.tvremote.protocol.AndroidTvRemoteV2Client
 import com.ryzen.tvremote.protocol.ConnectionStatus
 import com.ryzen.tvremote.protocol.DiscoveredDevice
 import com.ryzen.tvremote.protocol.DiscoveryManager
-import com.ryzen.tvremote.protocol.IRemoteController
 import com.ryzen.tvremote.protocol.KeyDirection
 import com.ryzen.tvremote.protocol.RemoteKey
 import com.ryzen.tvremote.protocol.VolumeState
@@ -21,12 +22,9 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
-import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.combine
-import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
 class MainViewModel(application: Application) : AndroidViewModel(application) {
@@ -36,10 +34,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         private const val PREFS_NAME = "tv_remote_prefs"
         private const val KEY_LAST_IP = "last_tv_ip"
         private const val KEY_LAST_NAME = "last_tv_name"
-        private const val KEY_USE_ADB = "use_adb"
         private const val KEY_AMOLED_MODE = "is_amoled_mode"
         private const val KEY_TUTORIAL_SEEN = "has_seen_tutorial"
         private const val KEY_IGNORED_UPDATE = "ignored_update_version"
+        private const val KEY_CONTROL_MODE = "control_mode"
+        private const val KEY_HAPTICS = "haptics_enabled"
+        private const val KEY_VOLUME_KEYS = "volume_keys_control_tv"
         const val DEFAULT_IP = ""
         const val DEFAULT_NAME = "Android TV"
     }
@@ -47,36 +47,39 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val prefs: SharedPreferences =
         application.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
 
-    private val v2Client = AndroidTvRemoteV2Client(application, viewModelScope)
-    private val adbClient = AdbRemoteClient(viewModelScope)
+    private val client = AndroidTvRemoteV2Client(application, viewModelScope)
     val discoveryManager = DiscoveryManager(application)
+    private val shortcutRepo = AppShortcutRepository(prefs)
 
-    private val _isAdbMode = MutableStateFlow(prefs.getBoolean(KEY_USE_ADB, false))
-    val isAdbMode: StateFlow<Boolean> = _isAdbMode.asStateFlow()
+    // ---- Preferences -------------------------------------------------------------------------
 
     private val _isAmoledMode = MutableStateFlow(prefs.getBoolean(KEY_AMOLED_MODE, false))
     val isAmoledMode: StateFlow<Boolean> = _isAmoledMode.asStateFlow()
 
+    private val _controlMode = MutableStateFlow(
+        runCatching { ControlMode.valueOf(prefs.getString(KEY_CONTROL_MODE, null) ?: "") }
+            .getOrDefault(ControlMode.SWIPE)
+    )
+    val controlMode: StateFlow<ControlMode> = _controlMode.asStateFlow()
+
+    private val _hapticsEnabled = MutableStateFlow(prefs.getBoolean(KEY_HAPTICS, true))
+    val hapticsEnabled: StateFlow<Boolean> = _hapticsEnabled.asStateFlow()
+
+    private val _volumeKeysControlTv = MutableStateFlow(prefs.getBoolean(KEY_VOLUME_KEYS, true))
+    val volumeKeysControlTv: StateFlow<Boolean> = _volumeKeysControlTv.asStateFlow()
+
+    // ---- UI state ----------------------------------------------------------------------------
+
     val showTutorial = MutableStateFlow(!prefs.getBoolean(KEY_TUTORIAL_SEEN, false))
     val availableUpdate = MutableStateFlow<AppUpdateInfo?>(null)
 
-    private val _toastEvent = MutableSharedFlow<String>()
+    private val _toastEvent = MutableSharedFlow<String>(extraBufferCapacity = 4)
     val toastEvent: SharedFlow<String> = _toastEvent.asSharedFlow()
 
-    private val activeController: IRemoteController
-        get() = if (_isAdbMode.value) adbClient else v2Client
+    val connectionStatus: StateFlow<ConnectionStatus> = client.status
+    val volumeState: StateFlow<VolumeState> = client.volumeState
 
-    val connectionStatus: StateFlow<ConnectionStatus> =
-        combine(_isAdbMode, v2Client.status, adbClient.status) { adb, v2Status, adbStatus ->
-            if (adb) adbStatus else v2Status
-        }.stateIn(viewModelScope, SharingStarted.Eagerly, ConnectionStatus.Disconnected)
-
-    val volumeState: StateFlow<VolumeState> =
-        combine(_isAdbMode, v2Client.volumeState, adbClient.volumeState) { adb, v2Vol, adbVol ->
-            if (adb) adbVol else v2Vol
-        }.stateIn(viewModelScope, SharingStarted.Eagerly, VolumeState())
-
-    val currentApp: StateFlow<String> = v2Client.currentApp
+    val appShortcuts: StateFlow<List<AppShortcut>> = shortcutRepo.shortcuts
 
     private val _currentIp = MutableStateFlow(prefs.getString(KEY_LAST_IP, DEFAULT_IP) ?: DEFAULT_IP)
     val currentIp: StateFlow<String> = _currentIp.asStateFlow()
@@ -87,107 +90,161 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     val discoveredDevices: StateFlow<List<DiscoveredDevice>> = discoveryManager.discoveredDevices
     val isScanning: StateFlow<Boolean> = discoveryManager.isScanning
 
-    // Dialog display states
     val showPinDialog = MutableStateFlow(false)
-    val showDevicePickerDialog = MutableStateFlow(false)
+    val showDevicePicker = MutableStateFlow(false)
     val showKeyboardDialog = MutableStateFlow(false)
+    val showSettings = MutableStateFlow(false)
+
+    /** True while the app is on screen; used to avoid reconnecting from the background. */
+    private var inForeground = false
 
     init {
-        // Observe connection status to automatically show PIN dialog if required
         viewModelScope.launch {
-            v2Client.status.collect { status ->
+            client.status.collect { status ->
                 if (status is ConnectionStatus.NeedsPairing) {
                     showPinDialog.value = true
                 } else if (status is ConnectionStatus.Connected) {
+                    // The client can't reliably read the TV's name, so keep the name we already
+                    // have (from discovery, or the IP for manual connections).
                     showPinDialog.value = false
-                    _currentName.value = status.deviceName
-                    prefs.edit().putString(KEY_LAST_NAME, status.deviceName).apply()
                 }
             }
         }
 
-        // Observe background mDNS scan and auto-connect to discovered TVs
+        // Auto-reconnect to a known TV when discovery finds it again.
         viewModelScope.launch {
             discoveryManager.discoveredDevices.collect { devices ->
-                if (devices.isEmpty()) return@collect
+                if (devices.isEmpty() || !inForeground) return@collect
 
-                val currentStatus = connectionStatus.value
-                val isConnected = currentStatus is ConnectionStatus.Connected
-                val isConnecting = currentStatus is ConnectionStatus.Connecting
-
-                // Attempt automatic reconnect when disconnected or in error state
-                if (!isConnected && !isConnecting) {
-                    val matchedDevice = devices.find { it.host == _currentIp.value || it.name == _currentName.value }
-                    if (matchedDevice != null) {
-                        Log.i(TAG, "Connecting to known TV: ${matchedDevice.name} (${matchedDevice.host})")
-                        connectToTv(matchedDevice.host, matchedDevice.name)
-                        return@collect
+                // Adopt the friendly name once discovery sees the TV we're configured for.
+                devices.find { it.host == _currentIp.value }?.let { match ->
+                    if (match.name.isNotBlank() && match.name != _currentName.value) {
+                        _currentName.value = match.name
+                        prefs.edit().putString(KEY_LAST_NAME, match.name).apply()
                     }
+                }
 
-                    // If a single TV is discovered on network and current connection is inactive, auto-connect
-                    if (devices.size == 1 && (currentStatus is ConnectionStatus.Error || currentStatus is ConnectionStatus.Disconnected)) {
-                        val newTv = devices.first()
-                        Log.i(TAG, "Auto-connecting to discovered TV: ${newTv.name} (${newTv.host})")
-                        connectToTv(newTv.host, newTv.name)
-                    } else if (devices.size > 1 && currentStatus is ConnectionStatus.Error) {
-                        showDevicePickerDialog.value = true
+                val status = connectionStatus.value
+                if (status is ConnectionStatus.Connected ||
+                    status is ConnectionStatus.Connecting ||
+                    status is ConnectionStatus.NeedsPairing
+                ) return@collect
+
+                val known = devices.find { it.host == _currentIp.value }
+                if (known != null) {
+                    Log.i(TAG, "Connecting to known TV: ${known.name} (${known.host})")
+                    connectToTv(known.host, known.name)
+                } else if (_currentIp.value.isEmpty()) {
+                    if (devices.size == 1) {
+                        connectToTv(devices.first().host, devices.first().name)
+                    } else {
+                        showDevicePicker.value = true
                     }
                 }
             }
         }
 
-        // Start mDNS scan for TVs in background
-        discoveryManager.startDiscovery()
-
-        // Auto-connect to last saved IP address
-        connectToTv(_currentIp.value, _currentName.value)
-
-        // Check for updates in background shortly after startup
         viewModelScope.launch {
             delay(2500L)
             checkForUpdates(manual = false)
         }
     }
 
-    fun connectToTv(ip: String, name: String = DEFAULT_NAME) {
+    // ---- Connection --------------------------------------------------------------------------
+
+    fun connectToTv(ip: String, name: String? = null) {
         val cleanIp = ip.trim()
         if (cleanIp.isEmpty()) return
 
-        _currentIp.value = cleanIp
-        _currentName.value = name
+        val displayName = name?.takeIf { it.isNotBlank() }
+            ?: if (cleanIp == _currentIp.value) _currentName.value else cleanIp
 
+        _currentIp.value = cleanIp
+        _currentName.value = displayName
         prefs.edit()
             .putString(KEY_LAST_IP, cleanIp)
-            .putString(KEY_LAST_NAME, name)
+            .putString(KEY_LAST_NAME, displayName)
             .apply()
 
-        showDevicePickerDialog.value = false
+        showDevicePicker.value = false
 
         viewModelScope.launch {
             try {
-                activeController.connect(cleanIp)
+                client.connect(cleanIp)
             } catch (e: Exception) {
                 Log.e(TAG, "Error connecting to TV: ${e.message}", e)
             }
         }
     }
 
+    fun reconnect() = connectToTv(_currentIp.value)
+
     fun finishPairing(pinCode: String) {
         showPinDialog.value = false
         viewModelScope.launch {
             try {
-                v2Client.finishPairing(pinCode)
+                client.finishPairing(pinCode)
             } catch (e: Exception) {
                 Log.e(TAG, "Pairing failed: ${e.message}", e)
             }
         }
     }
 
-    fun setAdbMode(enabled: Boolean) {
-        _isAdbMode.value = enabled
-        prefs.edit().putBoolean(KEY_USE_ADB, enabled).apply()
-        // Reconnect with chosen protocol
-        connectToTv(_currentIp.value, _currentName.value)
+    fun rePair() {
+        if (_currentIp.value.isEmpty()) {
+            showDevicePicker.value = true
+        } else {
+            client.forcePair(_currentIp.value)
+        }
+    }
+
+    fun scanDevices() {
+        discoveryManager.stopDiscovery()
+        discoveryManager.startDiscovery()
+    }
+
+    fun onForeground() {
+        inForeground = true
+        discoveryManager.startDiscovery()
+        if (_currentIp.value.isNotEmpty()) connectToTv(_currentIp.value)
+    }
+
+    fun onBackground() {
+        inForeground = false
+        // Release the TV session so other phones can connect, and stop battery-hungry discovery.
+        client.disconnect()
+        discoveryManager.stopDiscovery()
+    }
+
+    // ---- Remote input ------------------------------------------------------------------------
+
+    fun sendKey(key: RemoteKey, direction: KeyDirection = KeyDirection.SHORT) {
+        client.sendKey(key, direction)
+    }
+
+    fun sendText(text: String) = client.sendText(text)
+
+    fun launchApp(shortcut: AppShortcut) {
+        if (connectionStatus.value !is ConnectionStatus.Connected) {
+            _toastEvent.tryEmit("Not connected to a TV")
+            return
+        }
+        client.launchApp(shortcut.launchTarget)
+        _toastEvent.tryEmit("Opening ${shortcut.name} on TV…")
+    }
+
+    // ---- App shortcuts -----------------------------------------------------------------------
+
+    fun addShortcut(shortcut: AppShortcut) = shortcutRepo.add(shortcut)
+    fun updateShortcut(shortcut: AppShortcut) = shortcutRepo.update(shortcut)
+    fun removeShortcut(id: String) = shortcutRepo.remove(id)
+    fun moveShortcut(id: String, delta: Int) = shortcutRepo.move(id, delta)
+
+    // ---- Settings ----------------------------------------------------------------------------
+
+    fun setControlMode(mode: ControlMode) {
+        _controlMode.value = mode
+        prefs.edit().putString(KEY_CONTROL_MODE, mode.name).apply()
     }
 
     fun setAmoledMode(enabled: Boolean) {
@@ -195,8 +252,14 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         prefs.edit().putBoolean(KEY_AMOLED_MODE, enabled).apply()
     }
 
-    fun toggleAmoledMode() {
-        setAmoledMode(!_isAmoledMode.value)
+    fun setHapticsEnabled(enabled: Boolean) {
+        _hapticsEnabled.value = enabled
+        prefs.edit().putBoolean(KEY_HAPTICS, enabled).apply()
+    }
+
+    fun setVolumeKeysControlTv(enabled: Boolean) {
+        _volumeKeysControlTv.value = enabled
+        prefs.edit().putBoolean(KEY_VOLUME_KEYS, enabled).apply()
     }
 
     fun dismissTutorial() {
@@ -208,14 +271,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         showTutorial.value = true
     }
 
-    fun getAppVersion(): String {
-        return try {
-            val pInfo = getApplication<Application>().packageManager.getPackageInfo(getApplication<Application>().packageName, 0)
-            pInfo.versionName ?: "1.1.0"
-        } catch (e: Exception) {
-            "1.1.0"
-        }
-    }
+    // ---- Updates -----------------------------------------------------------------------------
+
+    fun getAppVersion(): String = BuildConfig.VERSION_NAME
 
     fun checkForUpdates(manual: Boolean = false) {
         viewModelScope.launch {
@@ -240,40 +298,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         availableUpdate.value = null
     }
 
-    fun sendKey(key: RemoteKey, direction: KeyDirection = KeyDirection.SHORT) {
-        activeController.sendKey(key, direction)
-    }
-
-    fun sendText(text: String) {
-        activeController.sendText(text)
-    }
-
-    fun scanDevices() {
-        discoveryManager.stopDiscovery()
-        discoveryManager.startDiscovery()
-    }
-
-    fun reconnect() {
-        connectToTv(_currentIp.value, _currentName.value)
-    }
-
-    fun rePair() {
-        v2Client.forcePair(_currentIp.value)
-    }
-
-    fun onForeground() {
-        connectToTv(_currentIp.value, _currentName.value)
-    }
-
-    fun onBackground() {
-        // Release TV remote session so other phones/family members can connect
-        activeController.disconnect()
-    }
-
     override fun onCleared() {
         super.onCleared()
         discoveryManager.stopDiscovery()
-        v2Client.disconnect()
-        adbClient.disconnect()
+        client.disconnect()
     }
 }

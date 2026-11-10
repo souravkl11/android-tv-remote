@@ -50,7 +50,7 @@ fun UpdateDialog(
                 Icon(
                     imageVector = Icons.Default.SystemUpdate,
                     contentDescription = null,
-                    tint = RemoteTheme.colors.accentGreen,
+                    tint = RemoteTheme.colors.accent,
                     modifier = Modifier.size(24.dp)
                 )
                 Text(
@@ -104,7 +104,7 @@ fun UpdateDialog(
                     onDownload(targetUrl)
                 },
                 colors = ButtonDefaults.buttonColors(
-                    containerColor = RemoteTheme.colors.accentGreen,
+                    containerColor = RemoteTheme.colors.accent,
                     contentColor = RemoteTheme.colors.background
                 ),
                 shape = RoundedCornerShape(10.dp)

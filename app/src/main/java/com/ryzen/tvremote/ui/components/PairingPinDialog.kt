@@ -69,10 +69,12 @@ fun PairingPinDialog(
                 OutlinedTextField(
                     value = pin,
                     onValueChange = { input ->
-                        val filtered = input.filter { it.isLetterOrDigit() }.uppercase()
+                        // The TV's code is hexadecimal (0-9, A-F).
+                        val filtered = input.filter { it in "0123456789abcdefABCDEF" }.uppercase()
                         if (filtered.length <= 6) {
                             pin = filtered
                             errorText = null
+                            if (filtered.length == 6) onConfirm(filtered)
                         }
                     },
                     singleLine = true,
@@ -94,9 +96,9 @@ fun PairingPinDialog(
                         )
                     },
                     colors = OutlinedTextFieldDefaults.colors(
-                        focusedBorderColor = RemoteTheme.colors.accentGreen,
+                        focusedBorderColor = RemoteTheme.colors.accent,
                         unfocusedBorderColor = RemoteTheme.colors.buttonSurface,
-                        cursorColor = RemoteTheme.colors.accentGreen
+                        cursorColor = RemoteTheme.colors.accent
                     ),
                     keyboardOptions = KeyboardOptions(
                         capitalization = KeyboardCapitalization.Characters,
@@ -131,7 +133,7 @@ fun PairingPinDialog(
                 },
                 enabled = pin.length == 6,
                 colors = ButtonDefaults.buttonColors(
-                    containerColor = RemoteTheme.colors.accentGreen,
+                    containerColor = RemoteTheme.colors.accent,
                     contentColor = RemoteTheme.colors.background
                 ),
                 shape = RoundedCornerShape(12.dp)

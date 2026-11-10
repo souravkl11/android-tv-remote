@@ -23,5 +23,8 @@ enum class RemoteKey(
     MENU("Menu", RemoteKeyCode.KEYCODE_MENU, 82),
     SETTINGS("Settings", RemoteKeyCode.KEYCODE_SETTINGS, 176),
     BACKSPACE("Backspace", RemoteKeyCode.KEYCODE_DEL, 67),
-    ENTER("Enter", RemoteKeyCode.KEYCODE_ENTER, 66)
+    ENTER("Enter", RemoteKeyCode.KEYCODE_ENTER, 66),
+    MEDIA_PLAY_PAUSE("Play/Pause", RemoteKeyCode.KEYCODE_MEDIA_PLAY_PAUSE, 85),
+    MEDIA_NEXT("Next", RemoteKeyCode.KEYCODE_MEDIA_NEXT, 87),
+    MEDIA_PREVIOUS("Previous", RemoteKeyCode.KEYCODE_MEDIA_PREVIOUS, 88)
 }

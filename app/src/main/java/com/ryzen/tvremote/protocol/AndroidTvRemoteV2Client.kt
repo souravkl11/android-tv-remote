@@ -28,6 +28,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -64,7 +65,7 @@ class AndroidTvRemoteV2Client(
     override val currentApp: StateFlow<String> = _currentApp.asStateFlow()
 
     private var activeHost: String = ""
-    private var activeDeviceName: String = "Living Room TV"
+    private var activeDeviceName: String = "Android TV"
 
     private var remoteSocket: SSLSocket? = null
     private var remoteOut: OutputStream? = null
@@ -79,6 +80,10 @@ class AndroidTvRemoteV2Client(
     private var sendJob: Job? = null
     private var imeCounter = 0
     private var fieldCounter = 0
+
+    /** Bumped on every connect/disconnect so a stale session can't overwrite the live status. */
+    @Volatile
+    private var sessionGen = 0
 
     override suspend fun connect(host: String) {
         activeHost = host
@@ -99,6 +104,7 @@ class AndroidTvRemoteV2Client(
     }
 
     private suspend fun connectInternal(host: String) {
+        val gen = sessionGen
         _status.value = ConnectionStatus.Connecting("Connecting to $host:$DEFAULT_REMOTE_PORT...")
 
         try {
@@ -148,9 +154,10 @@ class AndroidTvRemoteV2Client(
             }
 
             _status.value = ConnectionStatus.Connecting("Configuring session...")
-            readRemoteLoop(inputStream)
+            readRemoteLoop(inputStream, gen)
 
         } catch (e: Exception) {
+            if (gen != sessionGen) return // superseded by a newer session
             Log.w(TAG, "Failed to connect to remote service on port $DEFAULT_REMOTE_PORT: ${e.message}")
             val alreadyPaired = KeyManagerHelper.isHostPaired(context, host)
             if (!alreadyPaired && (e is SSLException || e.cause is SSLException || e.message?.contains("handshake", ignoreCase = true) == true)) {
@@ -158,7 +165,7 @@ class AndroidTvRemoteV2Client(
                 startPairingFlow(host)
             } else {
                 if (alreadyPaired) {
-                    _status.value = ConnectionStatus.Error("TV session busy (another device may be connected). Retrying...")
+                    _status.value = ConnectionStatus.Error("Can't connect. The TV may be off, busy with another remote, or no longer paired. Try Retry or Re-pair.")
                 } else {
                     _status.value = ConnectionStatus.Error("Cannot reach TV at $host: ${e.localizedMessage}")
                 }
@@ -299,6 +306,8 @@ class AndroidTvRemoteV2Client(
 
             // Immediate reconnect on Port 6466 with saved credentials in background session!
             delay(300)
+            sessionJob?.cancel()
+            sessionGen++
             sessionJob = scope.launch(Dispatchers.IO) {
                 connectInternal(activeHost)
             }
@@ -318,10 +327,8 @@ class AndroidTvRemoteV2Client(
         pairingServerCert = null
     }
 
-    private suspend fun readRemoteLoop(input: InputStream) {
-        val out = remoteOut ?: return
-
-        while (scope.isActive && remoteSocket?.isConnected == true) {
+    private suspend fun readRemoteLoop(input: InputStream, gen: Int) {
+        while (currentCoroutineContext().isActive && gen == sessionGen && remoteSocket?.isConnected == true) {
             val msg = try {
                 RemoteMessage.parseDelimitedFrom(input)
             } catch (e: Exception) {
@@ -403,8 +410,8 @@ class AndroidTvRemoteV2Client(
             }
         }
 
-        // Connection dropped
-        _status.value = ConnectionStatus.Disconnected
+        // Connection dropped (only report it if this is still the live session)
+        if (gen == sessionGen) _status.value = ConnectionStatus.Disconnected
     }
 
     private fun sendRaw(msg: RemoteMessage) {
@@ -488,6 +495,7 @@ class AndroidTvRemoteV2Client(
     }
 
     override fun disconnect() {
+        sessionGen++
         sessionJob?.cancel()
         sessionJob = null
         sendJob?.cancel()

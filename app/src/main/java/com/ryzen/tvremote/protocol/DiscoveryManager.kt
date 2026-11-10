@@ -71,12 +71,13 @@ class DiscoveryManager(private val context: Context) {
 
             override fun onDiscoveryStopped(serviceType: String) {
                 Log.d(TAG, "Discovery stopped: $serviceType")
-                _isScanning.value = false
+                // Ignore late callbacks from a listener that was already replaced by a restart.
+                if (activeListener == null || activeListener === this) _isScanning.value = false
             }
 
             override fun onStartDiscoveryFailed(serviceType: String, errorCode: Int) {
                 Log.e(TAG, "Start discovery failed: Error code: $errorCode")
-                _isScanning.value = false
+                if (activeListener == null || activeListener === this) _isScanning.value = false
             }
 
             override fun onStopDiscoveryFailed(serviceType: String, errorCode: Int) {

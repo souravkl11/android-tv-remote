@@ -24,12 +24,13 @@ data class RemoteAppColors(
     val trackpadDot: Color,
     val buttonSurface: Color,
     val buttonHighlight: Color,
-    val accentGreen: Color,
+    val accent: Color,
     val inputPillBorder: Color,
     val textPrimary: Color,
     val textSecondary: Color,
     val divider: Color,
-    val red: Color
+    val red: Color,
+    val warning: Color
 )
 
 val StandardDarkColors = RemoteAppColors(
@@ -40,12 +41,13 @@ val StandardDarkColors = RemoteAppColors(
     trackpadDot = Color(0xFFE2E4E9),
     buttonSurface = Color(0xFF2B2D35),
     buttonHighlight = Color(0xFF383B45),
-    accentGreen = Color(0xFF81C784),
+    accent = Color(0xFF81C784),
     inputPillBorder = Color(0xFF4CAF50),
     textPrimary = Color(0xFFFFFFFF),
     textSecondary = Color(0xFF9AA0A6),
     divider = Color(0xFF383B44),
-    red = Color(0xFFE57373)
+    red = Color(0xFFE57373),
+    warning = Color(0xFFFFB74D)
 )
 
 val TrueAmoledColors = RemoteAppColors(
@@ -56,12 +58,13 @@ val TrueAmoledColors = RemoteAppColors(
     trackpadDot = Color(0xFFE2E4E9),
     buttonSurface = Color(0xFF121317),   // Deep obsidian button surface
     buttonHighlight = Color(0xFF22242C),
-    accentGreen = Color(0xFF81C784),
+    accent = Color(0xFF81C784),
     inputPillBorder = Color(0xFF4CAF50),
     textPrimary = Color(0xFFFFFFFF),
     textSecondary = Color(0xFF8E929C),
     divider = Color(0xFF1C1D24),
-    red = Color(0xFFE57373)
+    red = Color(0xFFE57373),
+    warning = Color(0xFFFFB74D)
 )
 
 val LocalRemoteColors = staticCompositionLocalOf { StandardDarkColors }

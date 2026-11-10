@@ -7,27 +7,19 @@ No ads, no tracking, and no bloat.
 ## Features
 
 - **Android TV Remote Protocol v2**: Connects directly using Google's official TLS protocol with standard on-screen PIN pairing.
-- **ADB fallback**: Control devices over ADB (port 5555) if the official remote service is not available.
 - **Network discovery**: Automatically finds TVs on your local network using mDNS.
-- **D-pad and trackpad**: Smooth directional controls with haptic feedback and tap-to-navigate.
+- **Swipe and D-pad modes**: Swipe anywhere to navigate (default), or switch to a classic D-pad. Tap or hold for OK, with haptic feedback.
+- **App shortcuts**: One-tap buttons that open YouTube, Netflix, Spotify and more on your TV. Add your own by package name or link.
+- **Phone volume buttons**: Optionally control the TV volume with your phone's hardware keys.
 - **Keyboard input**: Type directly into TV search and input fields from your phone.
 - **Quick Settings tile**: Jump into the remote right from your Android notification shade.
 - **True AMOLED dark theme**: Pure black theme for OLED screens.
 
 ## How to Connect
 
-### 1. Official Protocol (Recommended)
-
 1. Make sure your phone and TV are on the same Wi-Fi network.
 2. Open the app and select your TV from the discovered devices.
 3. Enter the 6-character PIN code displayed on your TV screen.
-
-### 2. ADB over Wi-Fi
-
-If your TV does not support the v2 protocol:
-1. Enable Developer Options on your TV (Settings > About > tap Build 7 times).
-2. Enable Network Debugging (or Wireless Debugging).
-3. In the app, enter your TV's IP address manually and connect via port 5555.
 
 ## Download
 
@@ -38,7 +30,7 @@ Download the latest APK from the [Releases](https://github.com/souravkl11/androi
 Prerequisites:
 - Android Studio Ladybug or newer
 - JDK 17
-- Android SDK 35
+- Android SDK 37
 
 ```bash
 git clone https://github.com/souravkl11/android-tv-remote.git
@@ -47,6 +39,10 @@ cd android-tv-remote
 ```
 
 The APK will be generated at `app/build/outputs/apk/debug/app-debug.apk`.
+
+## Credits
+
+App icons are from [Simple Icons](https://simpleicons.org) (CC0). The logos are trademarks of their respective owners and are used only to label app shortcuts.
 
 ## License
 

@@ -77,11 +77,11 @@ fun KeyboardDialog(
                         modifier = Modifier
                             .size(7.dp)
                             .clip(CircleShape)
-                            .background(RemoteTheme.colors.accentGreen)
+                            .background(RemoteTheme.colors.accent)
                     )
                     Text(
                         text = "Live Sync",
-                        color = RemoteTheme.colors.accentGreen,
+                        color = RemoteTheme.colors.accent,
                         fontSize = 12.sp,
                         fontWeight = FontWeight.Medium
                     )
@@ -129,7 +129,7 @@ fun KeyboardDialog(
                     maxLines = 3,
                     placeholder = { Text("Start typing...", color = RemoteTheme.colors.textSecondary) },
                     colors = OutlinedTextFieldDefaults.colors(
-                        focusedBorderColor = RemoteTheme.colors.accentGreen,
+                        focusedBorderColor = RemoteTheme.colors.accent,
                         unfocusedBorderColor = RemoteTheme.colors.buttonSurface,
                         focusedTextColor = RemoteTheme.colors.textPrimary,
                         unfocusedTextColor = RemoteTheme.colors.textPrimary
@@ -197,7 +197,7 @@ fun KeyboardDialog(
                             onDismiss()
                         },
                         colors = ButtonDefaults.buttonColors(
-                            containerColor = RemoteTheme.colors.accentGreen,
+                            containerColor = RemoteTheme.colors.accent,
                             contentColor = RemoteTheme.colors.background
                         ),
                         shape = RoundedCornerShape(10.dp),
