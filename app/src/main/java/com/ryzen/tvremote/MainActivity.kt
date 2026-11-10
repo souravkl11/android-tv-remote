@@ -6,6 +6,7 @@ import android.os.Bundle
 import android.view.KeyEvent
 import android.widget.Toast
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.viewModels
@@ -23,6 +24,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -53,7 +55,6 @@ import com.ryzen.tvremote.ui.components.AppStrip
 import com.ryzen.tvremote.ui.components.ConnectionBanner
 import com.ryzen.tvremote.ui.components.DPad
 import com.ryzen.tvremote.ui.components.DevicePickerSheet
-import com.ryzen.tvremote.ui.components.KeyboardDialog
 import com.ryzen.tvremote.ui.components.LocalHapticsEnabled
 import com.ryzen.tvremote.ui.components.ModeSwitch
 import com.ryzen.tvremote.ui.components.PairingPinDialog
@@ -61,6 +62,7 @@ import com.ryzen.tvremote.ui.components.RoundButton
 import com.ryzen.tvremote.ui.components.SettingsSheet
 import com.ryzen.tvremote.ui.components.SwipePad
 import com.ryzen.tvremote.ui.components.TopBar
+import com.ryzen.tvremote.ui.components.TypePanel
 import com.ryzen.tvremote.ui.components.TutorialDialog
 import com.ryzen.tvremote.ui.components.UpdateDialog
 import com.ryzen.tvremote.ui.components.VolumePillRow
@@ -137,7 +139,7 @@ fun TVRemoteScreen(viewModel: MainViewModel) {
 
     val showPinDialog by viewModel.showPinDialog.collectAsState()
     val showDevicePicker by viewModel.showDevicePicker.collectAsState()
-    val showKeyboardDialog by viewModel.showKeyboardDialog.collectAsState()
+    val isTyping by viewModel.isTyping.collectAsState()
     val showSettings by viewModel.showSettings.collectAsState()
     val showTutorial by viewModel.showTutorial.collectAsState()
     val availableUpdate by viewModel.availableUpdate.collectAsState()
@@ -148,6 +150,8 @@ fun TVRemoteScreen(viewModel: MainViewModel) {
     val context = LocalContext.current
     val connected = status is ConnectionStatus.Connected
     val controlsAlpha = if (connected) 1f else 0.45f
+
+    BackHandler(enabled = isTyping) { viewModel.isTyping.value = false }
 
     LaunchedEffect(Unit) {
         viewModel.toastEvent.collect { message ->
@@ -160,7 +164,8 @@ fun TVRemoteScreen(viewModel: MainViewModel) {
             .fillMaxSize()
             .background(RemoteTheme.colors.background)
             .statusBarsPadding()
-            .navigationBarsPadding(),
+            .navigationBarsPadding()
+            .imePadding(),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         TopBar(
@@ -185,83 +190,93 @@ fun TVRemoteScreen(viewModel: MainViewModel) {
             )
         }
 
-        Spacer(Modifier.height(8.dp))
+            Spacer(Modifier.height(8.dp))
 
-        AppStrip(
-            shortcuts = shortcuts,
-            onLaunch = { viewModel.launchApp(it) },
-            onAdd = { editingApp = null; showAddApp = true },
-            onEdit = { editingApp = it; showAddApp = true },
-            onMove = { app, delta -> viewModel.moveShortcut(app.id, delta) },
-            onRemove = { viewModel.removeShortcut(it.id) },
-            modifier = Modifier.alpha(controlsAlpha)
-        )
+            AppStrip(
+                shortcuts = shortcuts,
+                onLaunch = { viewModel.launchApp(it) },
+                onAdd = { editingApp = null; showAddApp = true },
+                onEdit = { editingApp = it; showAddApp = true },
+                onMove = { app, delta -> viewModel.moveShortcut(app.id, delta) },
+                onRemove = { viewModel.removeShortcut(it.id) },
+                modifier = Modifier.alpha(controlsAlpha)
+            )
 
-        Spacer(Modifier.height(14.dp))
+            Spacer(Modifier.height(14.dp))
 
-        ModeSwitch(
-            mode = controlMode,
-            onModeChange = { viewModel.setControlMode(it) },
-            modifier = Modifier.alpha(controlsAlpha)
-        )
+            ModeSwitch(
+                mode = controlMode,
+                onModeChange = { viewModel.setControlMode(it) },
+                modifier = Modifier.alpha(controlsAlpha)
+            )
 
-        BoxWithConstraints(
-            modifier = Modifier
-                .weight(1f)
-                .fillMaxWidth()
-                .padding(horizontal = 20.dp, vertical = 12.dp)
-                .alpha(controlsAlpha),
-            contentAlignment = Alignment.Center
-        ) {
-            Crossfade(targetState = controlMode, label = "controlMode") { mode ->
-                when (mode) {
-                    ControlMode.SWIPE -> SwipePad(
-                        onKey = { key, direction -> viewModel.sendKey(key, direction) },
-                        modifier = Modifier.fillMaxSize()
-                    )
-                    ControlMode.DPAD -> {
-                        val diameter = minOf(maxWidth, maxHeight, 300.dp)
-                        androidx.compose.foundation.layout.Box(
-                            modifier = Modifier.fillMaxSize(),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            DPad(
-                                onKey = { key, direction -> viewModel.sendKey(key, direction) },
-                                modifier = Modifier.size(diameter)
-                            )
+            BoxWithConstraints(
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxWidth()
+                    .padding(horizontal = 20.dp, vertical = 12.dp)
+                    .alpha(controlsAlpha),
+                contentAlignment = Alignment.Center
+            ) {
+                Crossfade(targetState = controlMode, label = "controlMode") { mode ->
+                    when (mode) {
+                        ControlMode.SWIPE -> SwipePad(
+                            onKey = { key, direction -> viewModel.sendKey(key, direction) },
+                            modifier = Modifier.fillMaxSize()
+                        )
+                        ControlMode.DPAD -> {
+                            val diameter = minOf(maxWidth, maxHeight, 300.dp)
+                            androidx.compose.foundation.layout.Box(
+                                modifier = Modifier.fillMaxSize(),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                DPad(
+                                    onKey = { key, direction -> viewModel.sendKey(key, direction) },
+                                    modifier = Modifier.size(diameter)
+                                )
+                            }
                         }
                     }
                 }
             }
-        }
 
-        ActionButtonsRow(
-            onKey = { key -> viewModel.sendKey(key) },
-            onKeyboardClick = { viewModel.showKeyboardDialog.value = true },
-            modifier = Modifier.alpha(controlsAlpha)
-        )
-
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 20.dp, vertical = 10.dp)
-                .alpha(controlsAlpha),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(12.dp)
-        ) {
-            VolumePillRow(
-                isMuted = volumeState.isMuted,
-                level = volumeState.level,
-                max = volumeState.max,
+        if (isTyping) {
+            // Docked above the keyboard; the pad above stays usable.
+            TypePanel(
+                onSendText = { viewModel.sendText(it) },
+                onKey = { viewModel.sendKey(it) },
+                onClose = { viewModel.isTyping.value = false },
+                modifier = Modifier.padding(start = 12.dp, end = 12.dp, top = 4.dp, bottom = 8.dp)
+            )
+        } else {
+            ActionButtonsRow(
                 onKey = { key -> viewModel.sendKey(key) },
-                modifier = Modifier.weight(1f)
+                onKeyboardClick = { viewModel.isTyping.value = true },
+                modifier = Modifier.alpha(controlsAlpha)
             )
-            RoundButton(
-                icon = Icons.Default.PlayArrow,
-                description = "Play or pause",
-                onClick = { viewModel.sendKey(RemoteKey.MEDIA_PLAY_PAUSE) },
-                size = 64.dp
-            )
+
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 20.dp, vertical = 10.dp)
+                    .alpha(controlsAlpha),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(12.dp)
+            ) {
+                VolumePillRow(
+                    isMuted = volumeState.isMuted,
+                    level = volumeState.level,
+                    max = volumeState.max,
+                    onKey = { key -> viewModel.sendKey(key) },
+                    modifier = Modifier.weight(1f)
+                )
+                RoundButton(
+                    icon = Icons.Default.PlayArrow,
+                    description = "Play or pause",
+                    onClick = { viewModel.sendKey(RemoteKey.MEDIA_PLAY_PAUSE) },
+                    size = 64.dp
+                )
+            }
         }
     }
 
@@ -283,14 +298,6 @@ fun TVRemoteScreen(viewModel: MainViewModel) {
             onScanClick = { viewModel.scanDevices() },
             onConnect = { ip, name -> viewModel.connectToTv(ip, name) },
             onDismiss = { viewModel.showDevicePicker.value = false }
-        )
-    }
-
-    if (showKeyboardDialog) {
-        KeyboardDialog(
-            onSendText = { text -> viewModel.sendText(text) },
-            onKey = { key -> viewModel.sendKey(key) },
-            onDismiss = { viewModel.showKeyboardDialog.value = false }
         )
     }
 

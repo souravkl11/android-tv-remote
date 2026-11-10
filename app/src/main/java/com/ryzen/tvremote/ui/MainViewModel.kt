@@ -92,7 +92,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     val showPinDialog = MutableStateFlow(false)
     val showDevicePicker = MutableStateFlow(false)
-    val showKeyboardDialog = MutableStateFlow(false)
+    val isTyping = MutableStateFlow(false)
     val showSettings = MutableStateFlow(false)
 
     /** True while the app is on screen; used to avoid reconnecting from the background. */
