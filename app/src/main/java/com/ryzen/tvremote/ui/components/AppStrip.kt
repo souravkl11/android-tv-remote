@@ -78,13 +78,24 @@ fun AppTileIcon(
     val glyph = remember(pathData) {
         pathData?.let { PathParser().parsePathString(it).toPath() }
     }
-    val onBrand = if (color.luminance() > 0.6f) Color(0xFF1E2025) else Color.White
+    // Netflix's mark is red on black, so it's inverted compared to the other brand tiles.
+    val redOnBlack = presetId == "netflix"
+    val onBrand = when {
+        redOnBlack -> Color(0xFFE50914)
+        color.luminance() > 0.6f -> Color(0xFF1E2025)
+        else -> Color.White
+    }
+    val fill = if (redOnBlack) {
+        Brush.verticalGradient(listOf(Color(0xFF1C1C1C), Color.Black))
+    } else {
+        Brush.verticalGradient(listOf(lerp(color, Color.White, 0.22f), color))
+    }
 
     Box(
         modifier = modifier
             .size(size)
             .clip(CircleShape)
-            .background(Brush.verticalGradient(listOf(lerp(color, Color.White, 0.22f), color))),
+            .background(fill),
         contentAlignment = Alignment.Center
     ) {
         if (glyph != null) {
