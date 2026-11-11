@@ -131,6 +131,9 @@ class AndroidTvRemoteV2Client(
     private val _voiceRequests = MutableSharedFlow<Int>(extraBufferCapacity = 1)
     override val voiceRequests: SharedFlow<Int> = _voiceRequests.asSharedFlow()
 
+    private val _launchFailures = MutableSharedFlow<String>(extraBufferCapacity = 1)
+    override val launchFailures: SharedFlow<String> = _launchFailures.asSharedFlow()
+
     private val _voiceEnded = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
     override val voiceEnded: SharedFlow<Unit> = _voiceEnded.asSharedFlow()
 
@@ -530,6 +533,10 @@ class AndroidTvRemoteV2Client(
 
                 msg.hasRemoteError() -> {
                     Log.w(TAG, "TV reported an error: ${msg.remoteError}")
+                    val failed = msg.remoteError.message
+                    if (failed.hasRemoteAppLinkLaunchRequest()) {
+                        _launchFailures.tryEmit(failed.remoteAppLinkLaunchRequest.appLink)
+                    }
                 }
             }
         }

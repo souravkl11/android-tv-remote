@@ -39,17 +39,13 @@ fun UpdateDialog(
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .heightIn(max = 180.dp)
+                    .heightIn(max = 280.dp)
                     .clip(RoundedCornerShape(24.dp))
                     .background(scheme.surfaceContainerHigh)
                     .verticalScroll(rememberScrollState())
                     .padding(16.dp)
             ) {
-                Text(
-                    text = updateInfo.releaseNotes.trim(),
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = scheme.onSurfaceVariant
-                )
+                MarkdownText(updateInfo.releaseNotes)
             }
             Spacer(Modifier.height(20.dp))
         }

@@ -35,6 +35,8 @@ interface IRemoteController {
     val supportsVoice: Boolean
     /** Voice sessions the TV opens by itself, e.g. when an app's own mic button is pressed. */
     val voiceRequests: SharedFlow<Int>
+    /** The TV couldn't open a link sent with [launchApp] (and hangs up on us when that happens). */
+    val launchFailures: SharedFlow<String>
     /** The TV finished listening on its side. */
     val voiceEnded: SharedFlow<Unit>
 

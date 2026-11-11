@@ -52,6 +52,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         private const val KEY_HAPTICS = "haptics_enabled"
         private const val KEY_VOLUME_KEYS = "volume_keys_control_tv"
         private const val KEY_AUTO_KEYBOARD = "auto_keyboard"
+        private const val KEY_MARKET_LAUNCH_BROKEN = "market_launch_broken_"
         /** How long the TV keeps lending its mic to apps after the voice key. */
         private const val TV_MIC_WINDOW_MS = 13_000L
         private const val KEY_THEME_MODE = "theme_mode"
@@ -181,6 +182,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
         viewModelScope.launch {
             client.voiceEnded.collect { recorder?.stop() }
+        }
+        viewModelScope.launch {
+            client.launchFailures.collect { link -> onLaunchFailed(link) }
         }
 
         // Auto-reconnect to a known TV when discovery finds it again.
@@ -401,8 +405,50 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             _toastEvent.tryEmit("Not connected to a TV")
             return
         }
-        client.launchApp(shortcut.launchTarget)
+        client.launchApp(resolveLaunchTarget(shortcut.launchTarget))
         _toastEvent.tryEmit("Opening ${shortcut.name}")
+    }
+
+    // Some TVs (a TCL set, for one) have a Play Store that doesn't handle market://launch. The TV
+    // answers such a link with an error and drops the connection, so once that has happened we
+    // remember it for that TV and open the app's Play Store page instead.
+    private val marketLaunch = Regex("^market://launch[?]id=([^&]+)")
+
+    private fun marketLaunchBrokenKey() = KEY_MARKET_LAUNCH_BROKEN + _currentIp.value
+
+    private fun resolveLaunchTarget(target: String): String {
+        val pkg = if (target.contains("://")) {
+            marketLaunch.find(target)?.groupValues?.get(1)
+        } else {
+            target.trim()
+        } ?: return target
+        return if (prefs.getBoolean(marketLaunchBrokenKey(), false)) {
+            "market://details?id=$pkg"
+        } else {
+            "market://launch?id=$pkg"
+        }
+    }
+
+    private suspend fun onLaunchFailed(link: String) {
+        val pkg = marketLaunch.find(link)?.groupValues?.get(1)
+        if (pkg == null) {
+            _toastEvent.tryEmit("The TV couldn't open that link")
+            delay(500)
+            reconnect()
+            return
+        }
+        prefs.edit().putBoolean(marketLaunchBrokenKey(), true).apply()
+        delay(500)
+        reconnect()
+        delay(500)
+        val connected = withTimeoutOrNull(20_000L) {
+            connectionStatus.first { it is ConnectionStatus.Connected }
+        }
+        if (connected != null) {
+            delay(800)
+            client.launchApp("market://details?id=$pkg")
+            _toastEvent.tryEmit("This TV can't open apps by package name. Showing its Play Store page instead")
+        }
     }
 
     // ---- App shortcuts -----------------------------------------------------------------------
@@ -483,7 +529,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             }
             "update" -> availableUpdate.value = AppUpdateInfo(
                 latestVersion = "1.3.0",
-                releaseNotes = "Fresh Material 3 Expressive design, a light theme and a new swipe pad.",
+                releaseNotes = "## Fixes\n\n- **Typing works everywhere**: now also in the Play Store search.\n- Hold `power` to open the TV's power menu.\n\n## What's new\n\n- **Voice search**: tap the mic and talk. See [the README](https://github.com/souravkl11/android-tv-remote) for *details*.\n  - Works with YouTube too\n1. First step\n2. Second step",
                 releaseUrl = "https://example.com",
                 apkDownloadUrl = null
             )
