@@ -4,6 +4,18 @@ A clean, open-source Android app to control your Android TV or Google TV over Wi
 
 No ads, no tracking, and no bloat.
 
+<p align="center">
+  <a href="https://github.com/souravkl11/android-tv-remote/releases/latest"><img alt="Download the latest APK" src="https://img.shields.io/badge/Download-Latest%20APK-3DDC84?style=for-the-badge&logo=android&logoColor=white"></a>
+  &nbsp;
+  <a href="https://github.com/souravkl11/android-tv-remote/tree/ios"><img alt="iOS version" src="https://img.shields.io/badge/iOS-Version-000000?style=for-the-badge&logo=apple&logoColor=white"></a>
+</p>
+
+## iOS version
+
+There is also a native iPhone version, written in SwiftUI with iOS 26 Liquid Glass. It speaks the same Android TV Remote Protocol v2 as this app and has no third-party dependencies. It isn't on the App Store: you build and install it yourself with [xtool](https://xtool.sh), and the steps are in the README on the [`ios` branch](https://github.com/souravkl11/android-tv-remote/tree/ios).
+
+It covers the core remote (D-pad, keys, keyboard, TV discovery and PIN pairing), but not everything in the Android app, such as the app shortcuts, themes and voice search.
+
 ## Features
 
 - **Android TV Remote Protocol v2**: Connects directly using Google's official TLS protocol with standard on-screen PIN pairing.
@@ -21,10 +33,6 @@ No ads, no tracking, and no bloat.
 1. Make sure your phone and TV are on the same Wi-Fi network.
 2. Open the app and select your TV from the discovered devices.
 3. Enter the 6-character PIN code displayed on your TV screen.
-
-## Download
-
-Download the latest APK from the [Releases](https://github.com/souravkl11/android-tv-remote/releases) page.
 
 ## Building
 
