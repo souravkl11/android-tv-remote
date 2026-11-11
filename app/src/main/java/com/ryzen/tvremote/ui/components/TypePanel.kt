@@ -16,7 +16,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.Backspace
 import androidx.compose.material.icons.rounded.Close
-import androidx.compose.material.icons.rounded.Search
+import androidx.compose.material.icons.automirrored.rounded.KeyboardReturn
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -31,6 +31,8 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.TextRange
+import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
@@ -52,6 +54,8 @@ import com.ryzen.tvremote.protocol.RemoteKey
  */
 @Composable
 fun TypePanel(
+    initialText: String,
+    hint: String?,
     onSendText: (String) -> Unit,
     onKey: (RemoteKey) -> Unit,
     onClose: () -> Unit,
@@ -61,7 +65,12 @@ fun TypePanel(
     val haptic = rememberHaptic()
     val keyboard = LocalSoftwareKeyboardController.current
     val focusRequester = remember { FocusRequester() }
-    var text by remember { mutableStateOf("") }
+    // Starts with whatever the TV field already holds, so deleting works from the right place.
+    var field by remember { mutableStateOf(TextFieldValue(initialText, TextRange(initialText.length))) }
+    val text = field.text
+    fun setText(value: String) {
+        field = TextFieldValue(value, TextRange(value.length))
+    }
 
     LaunchedEffect(Unit) {
         focusRequester.requestFocus()
@@ -92,20 +101,28 @@ fun TypePanel(
             horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             TextField(
-                value = text,
-                onValueChange = { newText ->
+                value = field,
+                onValueChange = { newValue ->
+                    val newText = newValue.text
+                    // Read the live state, not the value from the last frame: several edits can
+                    // arrive before a recomposition.
+                    val oldText = field.text
                     // Send only what changed: backspaces for removed chars, then the new tail.
                     var common = 0
-                    while (common < text.length && common < newText.length && text[common] == newText[common]) common++
-                    repeat(text.length - common) { onKey(RemoteKey.BACKSPACE) }
+                    while (common < oldText.length && common < newText.length && oldText[common] == newText[common]) common++
+                    repeat(oldText.length - common) { onKey(RemoteKey.BACKSPACE) }
                     val added = newText.substring(common)
                     if (added.isNotEmpty()) onSendText(added)
-                    text = newText
+                    field = newValue
                 },
                 singleLine = true,
                 textStyle = MaterialTheme.typography.titleMedium,
                 placeholder = {
-                    Text("Type here, it appears on the TV", style = MaterialTheme.typography.bodyLarge, maxLines = 1)
+                    Text(
+                        text = hint?.takeIf { it.isNotBlank() } ?: "Type here, it appears on the TV",
+                        style = MaterialTheme.typography.bodyLarge,
+                        maxLines = 1
+                    )
                 },
                 shape = RoundedCornerShape(50),
                 colors = TextFieldDefaults.colors(
@@ -114,8 +131,8 @@ fun TypePanel(
                     focusedIndicatorColor = Color.Transparent,
                     unfocusedIndicatorColor = Color.Transparent
                 ),
-                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
-                keyboardActions = KeyboardActions(onSearch = { submit() }),
+                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+                keyboardActions = KeyboardActions(onDone = { submit() }),
                 modifier = Modifier
                     .weight(1f)
                     .focusRequester(focusRequester)
@@ -139,7 +156,7 @@ fun TypePanel(
                 modifier = Modifier.weight(1f),
                 onTick = {
                     haptic(HapticFeedbackType.TextHandleMove)
-                    if (text.isNotEmpty()) text = text.dropLast(1)
+                    if (field.text.isNotEmpty()) setText(field.text.dropLast(1))
                     onKey(RemoteKey.BACKSPACE)
                 }
             )
@@ -150,13 +167,13 @@ fun TypePanel(
                 height = 52.dp,
                 modifier = Modifier.weight(1f),
                 onClick = {
-                    repeat(text.length) { onKey(RemoteKey.BACKSPACE) }
-                    text = ""
+                    repeat(field.text.length) { onKey(RemoteKey.BACKSPACE) }
+                    setText("")
                 }
             )
             ExpressiveButton(
-                text = "Search",
-                icon = Icons.Rounded.Search,
+                text = "Enter",
+                icon = Icons.AutoMirrored.Rounded.KeyboardReturn,
                 height = 52.dp,
                 modifier = Modifier.weight(1.3f),
                 onClick = { submit() }

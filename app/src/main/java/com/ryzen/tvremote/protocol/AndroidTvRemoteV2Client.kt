@@ -3,6 +3,7 @@ package com.ryzen.tvremote.protocol
 import android.content.Context
 import android.os.Build
 import android.util.Log
+import com.ryzen.tvremote.BuildConfig
 import com.google.protobuf.ByteString
 import com.ryzen.tvremote.protocol.pairing.PairingConfiguration
 import com.ryzen.tvremote.protocol.pairing.PairingEncoding
@@ -23,6 +24,10 @@ import com.ryzen.tvremote.protocol.remote.RemoteKeyInject
 import com.ryzen.tvremote.protocol.remote.RemoteMessage
 import com.ryzen.tvremote.protocol.remote.RemotePingResponse
 import com.ryzen.tvremote.protocol.remote.RemoteSetActive
+import com.ryzen.tvremote.protocol.remote.RemoteTextFieldStatus
+import com.ryzen.tvremote.protocol.remote.RemoteVoiceBegin
+import com.ryzen.tvremote.protocol.remote.RemoteVoiceEnd
+import com.ryzen.tvremote.protocol.remote.RemoteVoicePayload
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -30,12 +35,16 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharedFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 import java.io.InputStream
 import java.io.OutputStream
 import java.net.InetSocketAddress
@@ -53,6 +62,31 @@ class AndroidTvRemoteV2Client(
         const val DEFAULT_PAIR_PORT = 6467
         const val DEFAULT_REMOTE_PORT = 6466
         private const val CLIENT_NAME = "Android TV Remote"
+
+        // Feature bits exchanged in RemoteConfigure / RemoteSetActive.
+        private const val FEATURE_PING = 1
+        private const val FEATURE_KEY = 2
+        private const val FEATURE_IME = 4
+        private const val FEATURE_VOICE = 8
+        private const val FEATURE_POWER = 32
+        private const val FEATURE_VOLUME = 64
+        private const val FEATURE_APP_LINK = 512
+        private const val CLIENT_FEATURES =
+            FEATURE_PING or FEATURE_KEY or FEATURE_IME or FEATURE_VOICE or FEATURE_POWER or FEATURE_VOLUME or FEATURE_APP_LINK
+
+        /** TVs drop short voice payloads, so the last chunk is padded with silence to a full one. */
+        private const val VOICE_CHUNK_MIN_BYTES = 20 * 1024
+        private const val VOICE_BEGIN_TIMEOUT_MS = 2500L
+
+        // The TV acknowledges each text edit with a new field counter. Edits sent before that
+        // carry a stale counter and get mangled, so they're queued until the ack (or a timeout).
+        private const val IME_TEXT_ACK_TIMEOUT_MS = 500L
+        private const val IME_DELETE_GAP_MS = 120L
+    }
+
+    private sealed interface ImeOp {
+        data class Text(val text: String) : ImeOp
+        data object Delete : ImeOp
     }
 
     private val _status = MutableStateFlow<ConnectionStatus>(ConnectionStatus.Disconnected)
@@ -80,6 +114,29 @@ class AndroidTvRemoteV2Client(
     private var sendJob: Job? = null
     private var imeCounter = 0
     private var fieldCounter = 0
+    // Counters from remote_ime_key_inject / remote_ime_show_request win over the batch-edit echo.
+    private var hasImeCounter = false
+    private var hasFieldCounter = false
+    private var activeFeatures = CLIENT_FEATURES
+
+    private val _imeField = MutableStateFlow<ImeField?>(null)
+    override val imeField: StateFlow<ImeField?> = _imeField.asStateFlow()
+
+    private val imeLock = Any()
+    private val imeQueue = ArrayDeque<ImeOp>()
+    private var imeSeq = 0
+    /** Sequence number of the edit waiting for the TV's ack, or 0 when idle. */
+    private var imeAwaiting = 0
+
+    private val _voiceRequests = MutableSharedFlow<Int>(extraBufferCapacity = 1)
+    override val voiceRequests: SharedFlow<Int> = _voiceRequests.asSharedFlow()
+
+    private val _voiceEnded = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
+    override val voiceEnded: SharedFlow<Unit> = _voiceEnded.asSharedFlow()
+
+    private var voiceBegin: CompletableDeferred<Int>? = null
+    @Volatile
+    private var voiceSessionId: Int? = null
 
     /** Bumped on every connect/disconnect so a stale session can't overwrite the live status. */
     @Volatile
@@ -336,12 +393,19 @@ class AndroidTvRemoteV2Client(
                 break
             } ?: break
 
+            if (BuildConfig.DEBUG && !msg.hasRemotePingRequest()) {
+                Log.v(TAG, "<< " + msg.toString().replace(Regex("\\s+"), " "))
+            }
+
             when {
                 msg.hasRemoteConfigure() -> {
-                    // Send client configuration back
+                    // Reply with the features both sides support.
+                    val tvFeatures = msg.remoteConfigure.code1
+                    activeFeatures = if (tvFeatures != 0) CLIENT_FEATURES and tvFeatures else CLIENT_FEATURES
+                    Log.i(TAG, "TV features=$tvFeatures, active=$activeFeatures")
                     val reply = RemoteMessage.newBuilder().apply {
                         remoteConfigure = RemoteConfigure.newBuilder().apply {
-                            code1 = 622
+                            code1 = activeFeatures
                             deviceInfo = RemoteDeviceInfo.newBuilder().apply {
                                 model = Build.MODEL ?: "Android Phone"
                                 vendor = Build.MANUFACTURER ?: "Google"
@@ -360,7 +424,7 @@ class AndroidTvRemoteV2Client(
                 msg.hasRemoteSetActive() -> {
                     val reply = RemoteMessage.newBuilder().apply {
                         remoteSetActive = RemoteSetActive.newBuilder().apply {
-                            active = 622
+                            active = activeFeatures
                         }.build()
                     }.build()
                     sendRaw(reply)
@@ -391,23 +455,89 @@ class AndroidTvRemoteV2Client(
                 }
 
                 msg.hasRemoteImeKeyInject() -> {
-                    val pkg = msg.remoteImeKeyInject.appInfo.appPackage
+                    val inject = msg.remoteImeKeyInject
+                    val pkg = inject.appInfo.appPackage
                     if (!pkg.isNullOrEmpty()) {
                         _currentApp.value = pkg
                     }
+                    val focused = inject.hasTextFieldStatus() && inject.textFieldStatus.counterField != 0
+                    if (inject.appInfo.counter != 0) {
+                        imeCounter = inject.appInfo.counter
+                        hasImeCounter = true
+                    }
+                    if (focused) {
+                        fieldCounter = inject.textFieldStatus.counterField
+                        hasFieldCounter = true
+                        _imeField.value = inject.textFieldStatus.toImeField()
+                    } else {
+                        // A key inject without a text field means focus left the field.
+                        _imeField.value = null
+                        clearImeQueue()
+                    }
+                    Log.d(TAG, "IME key inject: app=$pkg focused=$focused ime=$imeCounter field=$fieldCounter")
                 }
 
                 msg.hasRemoteImeShowRequest() -> {
-                    val status = msg.remoteImeShowRequest.remoteTextFieldStatus
-                    fieldCounter = status.counterField
-                    Log.d(TAG, "TV requested IME show: counter=${status.counterField}, label=${status.label}, val=${status.value}")
+                    val show = msg.remoteImeShowRequest
+                    if (show.hasRemoteTextFieldStatus()) {
+                        val status = show.remoteTextFieldStatus
+                        fieldCounter = status.counterField
+                        hasFieldCounter = true
+                        Log.d(TAG, "TV text field status: field=${status.counterField} label='${status.label}'")
+                        _imeField.value = status.toImeField()
+                        onImeAck()
+                    } else {
+                        Log.d(TAG, "TV text field closed")
+                        _imeField.value = null
+                        clearImeQueue()
+                    }
                 }
 
                 msg.hasRemoteImeBatchEdit() -> {
-                    imeCounter = msg.remoteImeBatchEdit.imeCounter
-                    fieldCounter = msg.remoteImeBatchEdit.fieldCounter
+                    val edit = msg.remoteImeBatchEdit
+                    if (edit.imeCounter == 0 && edit.fieldCounter == 0 && edit.editInfoCount == 0) {
+                        // An empty batch edit is sent when the TV keyboard goes away.
+                        Log.d(TAG, "TV keyboard hidden")
+                        _imeField.value = null
+                        clearImeQueue()
+                    } else {
+                        if (!hasImeCounter) imeCounter = edit.imeCounter
+                        if (!hasFieldCounter) fieldCounter = edit.fieldCounter
+                        // The same field got focus again (no key inject is sent for that).
+                        if (_imeField.value == null && edit.imeCounter != 0) _imeField.value = ImeField()
+                    }
+                }
+
+                msg.hasRemoteVoiceBegin() -> {
+                    val pending = voiceBegin
+                    if (pending != null && !pending.isCompleted) {
+                        pending.complete(msg.remoteVoiceBegin.sessionId)
+                    } else if (voiceSessionId == null) {
+                        // An app on the TV (e.g. YouTube's mic button) wants audio from the remote.
+                        Log.i(TAG, "TV asked for voice: session ${msg.remoteVoiceBegin.sessionId} from '${msg.remoteVoiceBegin.packageName}'")
+                        _voiceRequests.tryEmit(msg.remoteVoiceBegin.sessionId)
+                    }
+                }
+
+                // The TV stops listening (speech recognised or timed out) by echoing the session back.
+                msg.hasRemoteVoiceEnd() || msg.hasRemoteVoicePayload() -> {
+                    val ended = if (msg.hasRemoteVoiceEnd()) msg.remoteVoiceEnd.sessionId else msg.remoteVoicePayload.sessionId
+                    if (ended == voiceSessionId) {
+                        Log.i(TAG, "TV closed voice session $ended")
+                        _voiceEnded.tryEmit(Unit)
+                    }
+                }
+
+                msg.hasRemoteError() -> {
+                    Log.w(TAG, "TV reported an error: ${msg.remoteError}")
                 }
             }
+        }
+
+        if (gen == sessionGen) {
+            _imeField.value = null
+            voiceBegin?.cancel()
+            voiceSessionId = null
         }
 
         // Connection dropped (only report it if this is still the live session)
@@ -425,6 +555,15 @@ class AndroidTvRemoteV2Client(
     }
 
     override fun sendKey(key: RemoteKey, direction: KeyDirection) {
+        // Deletes are ordered with queued text so "ab⌫" never removes the wrong character.
+        if (key == RemoteKey.BACKSPACE && direction == KeyDirection.SHORT) {
+            enqueueIme(ImeOp.Delete)
+        } else {
+            sendKeyNow(key, direction)
+        }
+    }
+
+    private fun sendKeyNow(key: RemoteKey, direction: KeyDirection) {
         val out = remoteOut
         if (out == null || remoteSocket?.isConnected != true) {
             Log.w(TAG, "Cannot send key ${key.displayName}: remote socket not connected (out=$out, connected=${remoteSocket?.isConnected})")
@@ -450,7 +589,64 @@ class AndroidTvRemoteV2Client(
 
     override fun sendText(text: String) {
         if (text.isEmpty() || _status.value !is ConnectionStatus.Connected) return
+        enqueueIme(ImeOp.Text(text))
+    }
 
+    private fun enqueueIme(op: ImeOp) {
+        synchronized(imeLock) {
+            val last = imeQueue.lastOrNull()
+            if (op is ImeOp.Text && last is ImeOp.Text) {
+                imeQueue.removeLast()
+                imeQueue.addLast(ImeOp.Text(last.text + op.text))
+            } else {
+                imeQueue.addLast(op)
+            }
+            if (imeAwaiting == 0) pumpImeLocked()
+        }
+    }
+
+    /** Sends the next queued edit and waits for its ack (or a short gap for deletes). */
+    private fun pumpImeLocked() {
+        val op = imeQueue.removeFirstOrNull()
+        if (op == null) {
+            imeAwaiting = 0
+            return
+        }
+        val wait = when (op) {
+            is ImeOp.Text -> {
+                sendEditNow(op.text)
+                IME_TEXT_ACK_TIMEOUT_MS
+            }
+            ImeOp.Delete -> {
+                sendKeyNow(RemoteKey.BACKSPACE, KeyDirection.SHORT)
+                IME_DELETE_GAP_MS
+            }
+        }
+        val seq = ++imeSeq
+        imeAwaiting = seq
+        scope.launch {
+            delay(wait)
+            synchronized(imeLock) {
+                if (imeAwaiting == seq) pumpImeLocked()
+            }
+        }
+    }
+
+    private fun onImeAck() {
+        synchronized(imeLock) {
+            if (imeAwaiting != 0) pumpImeLocked()
+        }
+    }
+
+    private fun clearImeQueue() {
+        synchronized(imeLock) {
+            imeQueue.clear()
+            imeAwaiting = 0
+        }
+    }
+
+    private fun sendEditNow(text: String) {
+        // Inserted at the TV's cursor, which ends up after the text.
         val imeObj = RemoteImeObject.newBuilder().apply {
             start = text.length
             end = text.length
@@ -458,7 +654,7 @@ class AndroidTvRemoteV2Client(
         }.build()
 
         val editInfo = RemoteEditInfo.newBuilder().apply {
-            insert = 0
+            insert = 1
             textFieldStatus = imeObj
         }.build()
 
@@ -473,8 +669,67 @@ class AndroidTvRemoteV2Client(
         }.build()
 
         sendRaw(msg)
-        Log.d(TAG, "Dispatched text '$text' to TV")
+        Log.d(TAG, "Dispatched ${text.length} chars to TV (ime=$imeCounter field=$fieldCounter)")
     }
+
+    override val supportsVoice: Boolean
+        get() = activeFeatures and FEATURE_VOICE != 0
+
+    override suspend fun startVoice(): Int? {
+        if (_status.value !is ConnectionStatus.Connected || voiceSessionId != null) return null
+        val pending = CompletableDeferred<Int>()
+        voiceBegin = pending
+        // KEYCODE_SEARCH asks the TV to open a voice session; it answers with remote_voice_begin.
+        sendKey(RemoteKey.SEARCH)
+        val sessionId = withTimeoutOrNull(VOICE_BEGIN_TIMEOUT_MS) { pending.await() }
+        voiceBegin = null
+        if (sessionId == null) {
+            Log.w(TAG, "TV did not open a voice session")
+            return null
+        }
+        sendRaw(RemoteMessage.newBuilder().apply {
+            remoteVoiceBegin = RemoteVoiceBegin.newBuilder().setSessionId(sessionId).build()
+        }.build())
+        voiceSessionId = sessionId
+        Log.i(TAG, "Voice session $sessionId open")
+        return sessionId
+    }
+
+    override fun acceptVoice(sessionId: Int) {
+        if (voiceSessionId != null) return
+        sendRaw(RemoteMessage.newBuilder().apply {
+            remoteVoiceBegin = RemoteVoiceBegin.newBuilder().setSessionId(sessionId).build()
+        }.build())
+        voiceSessionId = sessionId
+        Log.i(TAG, "Voice session $sessionId accepted")
+    }
+
+    override fun sendVoice(samples: ByteArray, length: Int) {
+        val session = voiceSessionId ?: return
+        if (length <= 0) return
+        val padded = if (length < VOICE_CHUNK_MIN_BYTES) {
+            ByteArray(VOICE_CHUNK_MIN_BYTES).also { System.arraycopy(samples, 0, it, 0, length) }
+        } else {
+            samples.copyOf(length)
+        }
+        sendRaw(RemoteMessage.newBuilder().apply {
+            remoteVoicePayload = RemoteVoicePayload.newBuilder()
+                .setSessionId(session)
+                .setSamples(ByteString.copyFrom(padded))
+                .build()
+        }.build())
+    }
+
+    override fun endVoice() {
+        val session = voiceSessionId ?: return
+        voiceSessionId = null
+        sendRaw(RemoteMessage.newBuilder().apply {
+            remoteVoiceEnd = RemoteVoiceEnd.newBuilder().setSessionId(session).build()
+        }.build())
+        Log.i(TAG, "Voice session $session closed")
+    }
+
+    private fun RemoteTextFieldStatus.toImeField() = ImeField(value = value, label = label)
 
     override fun launchApp(appIdOrUrl: String) {
         if (_status.value !is ConnectionStatus.Connected) return

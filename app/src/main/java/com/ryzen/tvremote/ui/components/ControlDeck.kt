@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.automirrored.rounded.Input
@@ -24,6 +25,7 @@ import androidx.compose.material.icons.automirrored.rounded.VolumeUp
 import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.Home
 import androidx.compose.material.icons.rounded.Keyboard
+import androidx.compose.material.icons.rounded.Mic
 import androidx.compose.material.icons.rounded.Pause
 import androidx.compose.material.icons.rounded.PlayArrow
 import androidx.compose.material.icons.rounded.Remove
@@ -59,7 +61,7 @@ private val KeyHeight = 64.dp
 
 /**
  * Everything under the pad, sized for the thumb:
- *   Back · Home · Play/Pause
+ *   Back · Home · Voice · Play/Pause
  *   Volume rocker · Keyboard · Input
  */
 @Composable
@@ -70,6 +72,7 @@ fun ControlDeck(
     enabled: Boolean,
     onKey: (RemoteKey) -> Unit,
     onKeyboardClick: () -> Unit,
+    onVoiceClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     val scheme = MaterialTheme.colorScheme
@@ -82,10 +85,20 @@ fun ControlDeck(
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             NavKey(Icons.AutoMirrored.Rounded.ArrowBack, "Back", enabled, Modifier.weight(1f)) { onKey(RemoteKey.BACK) }
             NavKey(Icons.Rounded.Home, "Home", enabled, Modifier.weight(1f)) { onKey(RemoteKey.HOME) }
+            IconSurface(
+                icon = Icons.Rounded.Mic,
+                description = "Voice search",
+                onClick = onVoiceClick,
+                size = KeyHeight,
+                iconSize = 28.dp,
+                color = scheme.primary,
+                contentColor = scheme.onPrimary,
+                enabled = enabled
+            )
             PressSurface(
                 onClick = { onKey(RemoteKey.MEDIA_PLAY_PAUSE) },
                 modifier = Modifier
-                    .weight(0.8f)
+                    .width(KeyHeight + 12.dp)
                     .height(KeyHeight),
                 color = scheme.primaryContainer,
                 contentColor = scheme.onPrimaryContainer,
@@ -93,8 +106,8 @@ fun ControlDeck(
                 description = "Play or pause"
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(Icons.Rounded.PlayArrow, null, modifier = Modifier.size(28.dp))
-                    Icon(Icons.Rounded.Pause, null, modifier = Modifier.size(28.dp).offset(x = (-6).dp))
+                    Icon(Icons.Rounded.PlayArrow, null, modifier = Modifier.size(24.dp))
+                    Icon(Icons.Rounded.Pause, null, modifier = Modifier.size(24.dp).offset(x = (-5).dp))
                 }
             }
         }

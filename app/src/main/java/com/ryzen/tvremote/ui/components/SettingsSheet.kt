@@ -11,6 +11,7 @@ import androidx.compose.material.icons.rounded.ChevronRight
 import androidx.compose.material.icons.rounded.Contrast
 import androidx.compose.material.icons.rounded.DarkMode
 import androidx.compose.material.icons.rounded.Gamepad
+import androidx.compose.material.icons.rounded.Keyboard
 import androidx.compose.material.icons.rounded.Link
 import androidx.compose.material.icons.rounded.Palette
 import androidx.compose.material.icons.rounded.SystemUpdate
@@ -44,6 +45,7 @@ fun SettingsSheet(
     dynamicColor: Boolean,
     hapticsEnabled: Boolean,
     volumeKeysControlTv: Boolean,
+    autoKeyboard: Boolean,
     versionName: String,
     onControlModeChange: (ControlMode) -> Unit,
     onThemeModeChange: (ThemeMode) -> Unit,
@@ -51,6 +53,7 @@ fun SettingsSheet(
     onDynamicColorChange: (Boolean) -> Unit,
     onHapticsChange: (Boolean) -> Unit,
     onVolumeKeysChange: (Boolean) -> Unit,
+    onAutoKeyboardChange: (Boolean) -> Unit,
     onAddApp: () -> Unit,
     onSwitchTv: () -> Unit,
     onRePair: () -> Unit,
@@ -63,7 +66,7 @@ fun SettingsSheet(
     RemoteSheet(title = "Settings", onDismiss = onDismiss) {
         Group {
             GroupRow(
-                index = 0, count = 3,
+                index = 0, count = 4,
                 title = "Control style",
                 subtitle = "How you move around the TV",
                 icon = Icons.Rounded.Gamepad,
@@ -71,8 +74,9 @@ fun SettingsSheet(
                     ModeSwitch(controlMode, onControlModeChange, Modifier.fillMaxWidth(), trackColor = track)
                 }
             )
-            ToggleRow(1, 3, Icons.Rounded.Vibration, "Haptic feedback", "A light tick on every press", hapticsEnabled, onHapticsChange)
-            ToggleRow(2, 3, Icons.AutoMirrored.Rounded.VolumeUp, "Phone volume buttons", "Change the TV volume, not the phone's", volumeKeysControlTv, onVolumeKeysChange)
+            ToggleRow(1, 4, Icons.Rounded.Vibration, "Haptic feedback", "A light tick on every press", hapticsEnabled, onHapticsChange)
+            ToggleRow(2, 4, Icons.AutoMirrored.Rounded.VolumeUp, "Phone volume buttons", "Change the TV volume, not the phone's", volumeKeysControlTv, onVolumeKeysChange)
+            ToggleRow(3, 4, Icons.Rounded.Keyboard, "Keyboard pops up", "Opens when the TV asks for text, like search or a code", autoKeyboard, onAutoKeyboardChange)
         }
 
         SectionLabel("Look")

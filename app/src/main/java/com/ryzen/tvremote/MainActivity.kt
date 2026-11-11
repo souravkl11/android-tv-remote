@@ -1,5 +1,11 @@
 package com.ryzen.tvremote
 
+import com.ryzen.tvremote.ui.components.VoicePanel
+import com.ryzen.tvremote.ui.VoiceUi
+import androidx.compose.runtime.key
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.activity.compose.rememberLauncherForActivityResult
+import android.Manifest
 import android.content.Intent
 import android.graphics.Color as AndroidColor
 import android.net.Uri
@@ -164,6 +170,9 @@ fun TVRemoteScreen(viewModel: MainViewModel) {
     val controlMode by viewModel.controlMode.collectAsState()
     val hapticsEnabled by viewModel.hapticsEnabled.collectAsState()
     val volumeKeys by viewModel.volumeKeysControlTv.collectAsState()
+    val autoKeyboard by viewModel.autoKeyboard.collectAsState()
+    val typingField by viewModel.typingField.collectAsState()
+    val voice by viewModel.voice.collectAsState()
     val shortcuts by viewModel.appShortcuts.collectAsState()
 
     val showPinDialog by viewModel.showPinDialog.collectAsState()
@@ -182,10 +191,24 @@ fun TVRemoteScreen(viewModel: MainViewModel) {
     val hasTv = currentIp.isNotEmpty()
     val snackbar = remember { SnackbarHostState() }
 
-    BackHandler(enabled = isTyping) { viewModel.isTyping.value = false }
+    BackHandler(enabled = isTyping) { viewModel.closeTyping() }
+    BackHandler(enabled = voice !is VoiceUi.Idle) { viewModel.stopVoice() }
 
-    // Typing only makes sense while connected.
-    LaunchedEffect(connected) { if (!connected) viewModel.isTyping.value = false }
+    // Typing and voice only make sense while connected.
+    LaunchedEffect(connected) {
+        if (!connected) {
+            viewModel.closeTyping()
+            viewModel.stopVoice()
+        }
+    }
+
+    val micPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        if (granted) viewModel.startVoice() else viewModel.notify("Voice search needs the microphone")
+    }
+    val startVoice = {
+        if (viewModel.hasMicPermission()) viewModel.startVoice()
+        else micPermission.launch(Manifest.permission.RECORD_AUDIO)
+    }
 
     LaunchedEffect(Unit) {
         viewModel.toastEvent.collect { message ->
@@ -210,7 +233,7 @@ fun TVRemoteScreen(viewModel: MainViewModel) {
             deviceName = deviceName,
             hasTv = hasTv,
             onDevicePickerClick = { viewModel.showDevicePicker.value = true },
-            onPowerClick = { viewModel.sendKey(RemoteKey.POWER) },
+            onPowerKey = { direction -> viewModel.sendKey(RemoteKey.POWER, direction) },
             onSettingsClick = { viewModel.showSettings.value = true }
         )
 
@@ -317,14 +340,24 @@ fun TVRemoteScreen(viewModel: MainViewModel) {
             }
         }
 
-        if (isTyping) {
-            // Docked above the keyboard; the pad above stays usable.
-            TypePanel(
-                onSendText = { viewModel.sendText(it) },
-                onKey = { viewModel.sendKey(it) },
-                onClose = { viewModel.isTyping.value = false },
-                modifier = Modifier.padding(start = 12.dp, end = 12.dp, bottom = 8.dp)
+        if (voice !is VoiceUi.Idle) {
+            VoicePanel(
+                state = voice,
+                onStop = { viewModel.stopVoice() },
+                modifier = Modifier.padding(bottom = 12.dp)
             )
+        } else if (isTyping) {
+            // Docked above the keyboard; the pad above stays usable. A new TV field starts fresh.
+            key(typingField) {
+                TypePanel(
+                    initialText = typingField?.value.orEmpty(),
+                    hint = typingField?.label,
+                    onSendText = { viewModel.sendText(it) },
+                    onKey = { viewModel.sendKey(it) },
+                    onClose = { viewModel.closeTyping() },
+                    modifier = Modifier.padding(start = 12.dp, end = 12.dp, bottom = 8.dp)
+                )
+            }
         } else {
             ControlDeck(
                 isMuted = volumeState.isMuted,
@@ -332,7 +365,8 @@ fun TVRemoteScreen(viewModel: MainViewModel) {
                 volumeMax = volumeState.max,
                 enabled = connected,
                 onKey = { key -> viewModel.sendKey(key) },
-                onKeyboardClick = { viewModel.isTyping.value = true },
+                onKeyboardClick = { viewModel.openTyping() },
+                onVoiceClick = startVoice,
                 modifier = Modifier.padding(bottom = 12.dp)
             )
         }
@@ -369,6 +403,7 @@ fun TVRemoteScreen(viewModel: MainViewModel) {
             dynamicColor = dynamicColor,
             hapticsEnabled = hapticsEnabled,
             volumeKeysControlTv = volumeKeys,
+            autoKeyboard = autoKeyboard,
             versionName = viewModel.getAppVersion(),
             onControlModeChange = { viewModel.setControlMode(it) },
             onThemeModeChange = { viewModel.setThemeMode(it) },
@@ -376,6 +411,7 @@ fun TVRemoteScreen(viewModel: MainViewModel) {
             onDynamicColorChange = { viewModel.setDynamicColor(it) },
             onHapticsChange = { viewModel.setHapticsEnabled(it) },
             onVolumeKeysChange = { viewModel.setVolumeKeysControlTv(it) },
+            onAutoKeyboardChange = { viewModel.setAutoKeyboard(it) },
             onAddApp = {
                 viewModel.showSettings.value = false
                 editingApp = null

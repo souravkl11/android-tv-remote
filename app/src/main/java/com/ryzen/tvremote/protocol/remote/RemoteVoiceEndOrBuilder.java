@@ -7,4 +7,10 @@ package com.ryzen.tvremote.protocol.remote;
 public interface RemoteVoiceEndOrBuilder extends
     // @@protoc_insertion_point(interface_extends:remote.RemoteVoiceEnd)
     com.google.protobuf.MessageLiteOrBuilder {
+
+  /**
+   * <code>int32 session_id = 1;</code>
+   * @return The sessionId.
+   */
+  int getSessionId();
 }

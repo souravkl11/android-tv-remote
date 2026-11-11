@@ -39,15 +39,19 @@ message RemoteStart {
 }
 
 message RemoteVoiceEnd {
-
+  int32 session_id = 1;
 }
 
+// 16-bit PCM, 8 kHz, mono samples.
 message RemoteVoicePayload {
-
+  int32 session_id = 1;
+  bytes samples = 2;
 }
 
+// The TV sends this after KEYCODE_SEARCH; the remote echoes the session id back before streaming audio.
 message RemoteVoiceBegin {
-
+  int32 session_id = 1;
+  string package_name = 2;
 }
 
 message RemoteTextFieldStatus {

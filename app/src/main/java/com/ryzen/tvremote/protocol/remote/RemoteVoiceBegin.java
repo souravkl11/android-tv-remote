@@ -5,6 +5,10 @@
 package com.ryzen.tvremote.protocol.remote;
 
 /**
+ * <pre>
+ * The TV sends this after KEYCODE_SEARCH; the remote echoes the session id back before streaming audio.
+ * </pre>
+ *
  * Protobuf type {@code remote.RemoteVoiceBegin}
  */
 public  final class RemoteVoiceBegin extends
@@ -13,7 +17,81 @@ public  final class RemoteVoiceBegin extends
     // @@protoc_insertion_point(message_implements:remote.RemoteVoiceBegin)
     RemoteVoiceBeginOrBuilder {
   private RemoteVoiceBegin() {
+    packageName_ = "";
   }
+  public static final int SESSION_ID_FIELD_NUMBER = 1;
+  private int sessionId_;
+  /**
+   * <code>int32 session_id = 1;</code>
+   * @return The sessionId.
+   */
+  @java.lang.Override
+  public int getSessionId() {
+    return sessionId_;
+  }
+  /**
+   * <code>int32 session_id = 1;</code>
+   * @param value The sessionId to set.
+   */
+  private void setSessionId(int value) {
+    
+    sessionId_ = value;
+  }
+  /**
+   * <code>int32 session_id = 1;</code>
+   */
+  private void clearSessionId() {
+
+    sessionId_ = 0;
+  }
+
+  public static final int PACKAGE_NAME_FIELD_NUMBER = 2;
+  private java.lang.String packageName_;
+  /**
+   * <code>string package_name = 2;</code>
+   * @return The packageName.
+   */
+  @java.lang.Override
+  public java.lang.String getPackageName() {
+    return packageName_;
+  }
+  /**
+   * <code>string package_name = 2;</code>
+   * @return The bytes for packageName.
+   */
+  @java.lang.Override
+  public com.google.protobuf.ByteString
+      getPackageNameBytes() {
+    return com.google.protobuf.ByteString.copyFromUtf8(packageName_);
+  }
+  /**
+   * <code>string package_name = 2;</code>
+   * @param value The packageName to set.
+   */
+  private void setPackageName(
+      java.lang.String value) {
+    java.lang.Class<?> valueClass = value.getClass();
+  
+    packageName_ = value;
+  }
+  /**
+   * <code>string package_name = 2;</code>
+   */
+  private void clearPackageName() {
+
+    packageName_ = getDefaultInstance().getPackageName();
+  }
+  /**
+   * <code>string package_name = 2;</code>
+   * @param value The bytes for packageName to set.
+   */
+  private void setPackageNameBytes(
+      com.google.protobuf.ByteString value) {
+    checkByteStringIsUtf8(value);
+    packageName_ = value.toStringUtf8();
+
+  }
+
   public static com.ryzen.tvremote.protocol.remote.RemoteVoiceBegin parseFrom(
       java.nio.ByteBuffer data)
       throws com.google.protobuf.InvalidProtocolBufferException {
@@ -98,6 +176,10 @@ public  final class RemoteVoiceBegin extends
   }
 
   /**
+   * <pre>
+   * The TV sends this after KEYCODE_SEARCH; the remote echoes the session id back before streaming audio.
+   * </pre>
+   *
    * Protobuf type {@code remote.RemoteVoiceBegin}
    */
   public static final class Builder extends
@@ -110,6 +192,83 @@ public  final class RemoteVoiceBegin extends
       super(DEFAULT_INSTANCE);
     }
 
+
+    /**
+     * <code>int32 session_id = 1;</code>
+     * @return The sessionId.
+     */
+    @java.lang.Override
+    public int getSessionId() {
+      return instance.getSessionId();
+    }
+    /**
+     * <code>int32 session_id = 1;</code>
+     * @param value The sessionId to set.
+     * @return This builder for chaining.
+     */
+    public Builder setSessionId(int value) {
+      copyOnWrite();
+      instance.setSessionId(value);
+      return this;
+    }
+    /**
+     * <code>int32 session_id = 1;</code>
+     * @return This builder for chaining.
+     */
+    public Builder clearSessionId() {
+      copyOnWrite();
+      instance.clearSessionId();
+      return this;
+    }
+
+    /**
+     * <code>string package_name = 2;</code>
+     * @return The packageName.
+     */
+    @java.lang.Override
+    public java.lang.String getPackageName() {
+      return instance.getPackageName();
+    }
+    /**
+     * <code>string package_name = 2;</code>
+     * @return The bytes for packageName.
+     */
+    @java.lang.Override
+    public com.google.protobuf.ByteString
+        getPackageNameBytes() {
+      return instance.getPackageNameBytes();
+    }
+    /**
+     * <code>string package_name = 2;</code>
+     * @param value The packageName to set.
+     * @return This builder for chaining.
+     */
+    public Builder setPackageName(
+        java.lang.String value) {
+      copyOnWrite();
+      instance.setPackageName(value);
+      return this;
+    }
+    /**
+     * <code>string package_name = 2;</code>
+     * @return This builder for chaining.
+     */
+    public Builder clearPackageName() {
+      copyOnWrite();
+      instance.clearPackageName();
+      return this;
+    }
+    /**
+     * <code>string package_name = 2;</code>
+     * @param value The bytes for packageName to set.
+     * @return This builder for chaining.
+     */
+    public Builder setPackageNameBytes(
+        com.google.protobuf.ByteString value) {
+      copyOnWrite();
+      instance.setPackageNameBytes(value);
+      return this;
+    }
 
     // @@protoc_insertion_point(builder_scope:remote.RemoteVoiceBegin)
   }
@@ -126,8 +285,13 @@ public  final class RemoteVoiceBegin extends
         return new Builder();
       }
       case BUILD_MESSAGE_INFO: {
-          java.lang.Object[] objects = null;java.lang.String info =
-              "\u0000\u0000";
+          java.lang.Object[] objects = new java.lang.Object[] {
+            "sessionId_",
+            "packageName_",
+          };
+          java.lang.String info =
+              "\u0000\u0002\u0000\u0000\u0001\u0002\u0002\u0000\u0000\u0000\u0001\u0004\u0002\u0208" +
+              "";
           return newMessageInfo(DEFAULT_INSTANCE, info, objects);
       }
       // fall through

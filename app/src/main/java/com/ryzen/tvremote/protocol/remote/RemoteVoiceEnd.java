@@ -14,6 +14,32 @@ public  final class RemoteVoiceEnd extends
     RemoteVoiceEndOrBuilder {
   private RemoteVoiceEnd() {
   }
+  public static final int SESSION_ID_FIELD_NUMBER = 1;
+  private int sessionId_;
+  /**
+   * <code>int32 session_id = 1;</code>
+   * @return The sessionId.
+   */
+  @java.lang.Override
+  public int getSessionId() {
+    return sessionId_;
+  }
+  /**
+   * <code>int32 session_id = 1;</code>
+   * @param value The sessionId to set.
+   */
+  private void setSessionId(int value) {
+    
+    sessionId_ = value;
+  }
+  /**
+   * <code>int32 session_id = 1;</code>
+   */
+  private void clearSessionId() {
+
+    sessionId_ = 0;
+  }
+
   public static com.ryzen.tvremote.protocol.remote.RemoteVoiceEnd parseFrom(
       java.nio.ByteBuffer data)
       throws com.google.protobuf.InvalidProtocolBufferException {
@@ -111,6 +137,34 @@ public  final class RemoteVoiceEnd extends
     }
 
 
+    /**
+     * <code>int32 session_id = 1;</code>
+     * @return The sessionId.
+     */
+    @java.lang.Override
+    public int getSessionId() {
+      return instance.getSessionId();
+    }
+    /**
+     * <code>int32 session_id = 1;</code>
+     * @param value The sessionId to set.
+     * @return This builder for chaining.
+     */
+    public Builder setSessionId(int value) {
+      copyOnWrite();
+      instance.setSessionId(value);
+      return this;
+    }
+    /**
+     * <code>int32 session_id = 1;</code>
+     * @return This builder for chaining.
+     */
+    public Builder clearSessionId() {
+      copyOnWrite();
+      instance.clearSessionId();
+      return this;
+    }
+
     // @@protoc_insertion_point(builder_scope:remote.RemoteVoiceEnd)
   }
   @java.lang.Override
@@ -126,8 +180,11 @@ public  final class RemoteVoiceEnd extends
         return new Builder();
       }
       case BUILD_MESSAGE_INFO: {
-          java.lang.Object[] objects = null;java.lang.String info =
-              "\u0000\u0000";
+          java.lang.Object[] objects = new java.lang.Object[] {
+            "sessionId_",
+          };
+          java.lang.String info =
+              "\u0000\u0001\u0000\u0000\u0001\u0001\u0001\u0000\u0000\u0000\u0001\u0004";
           return newMessageInfo(DEFAULT_INSTANCE, info, objects);
       }
       // fall through

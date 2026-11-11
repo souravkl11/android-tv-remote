@@ -29,6 +29,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.ryzen.tvremote.protocol.ConnectionStatus
+import com.ryzen.tvremote.protocol.KeyDirection
 import com.ryzen.tvremote.ui.theme.Motion
 import com.ryzen.tvremote.ui.theme.RemoteTheme
 
@@ -38,7 +39,7 @@ fun TopBar(
     deviceName: String,
     hasTv: Boolean,
     onDevicePickerClick: () -> Unit,
-    onPowerClick: () -> Unit,
+    onPowerKey: (KeyDirection) -> Unit,
     onSettingsClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -109,10 +110,12 @@ fun TopBar(
             }
         }
 
-        IconSurface(
+        // Tap toggles power; hold for the TV's power menu.
+        HoldableKey(
             icon = Icons.Rounded.PowerSettingsNew,
             description = "Power",
-            onClick = onPowerClick,
+            longPressLabel = "Power menu",
+            onKey = onPowerKey,
             size = 60.dp,
             iconSize = 26.dp,
             color = scheme.errorContainer,

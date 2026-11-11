@@ -7,4 +7,16 @@ package com.ryzen.tvremote.protocol.remote;
 public interface RemoteVoicePayloadOrBuilder extends
     // @@protoc_insertion_point(interface_extends:remote.RemoteVoicePayload)
     com.google.protobuf.MessageLiteOrBuilder {
+
+  /**
+   * <code>int32 session_id = 1;</code>
+   * @return The sessionId.
+   */
+  int getSessionId();
+
+  /**
+   * <code>bytes samples = 2;</code>
+   * @return The samples.
+   */
+  com.google.protobuf.ByteString getSamples();
 }

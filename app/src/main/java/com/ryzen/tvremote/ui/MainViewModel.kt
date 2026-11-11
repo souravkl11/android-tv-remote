@@ -1,6 +1,8 @@
 package com.ryzen.tvremote.ui
 
+import android.Manifest
 import android.app.Application
+import android.content.pm.PackageManager
 import android.content.Context
 import android.content.SharedPreferences
 import android.util.Log
@@ -13,11 +15,15 @@ import com.ryzen.tvremote.protocol.AndroidTvRemoteV2Client
 import com.ryzen.tvremote.protocol.ConnectionStatus
 import com.ryzen.tvremote.protocol.DiscoveredDevice
 import com.ryzen.tvremote.protocol.DiscoveryManager
+import com.ryzen.tvremote.protocol.ImeField
 import com.ryzen.tvremote.protocol.KeyDirection
 import com.ryzen.tvremote.protocol.RemoteKey
 import com.ryzen.tvremote.protocol.VolumeState
 import com.ryzen.tvremote.update.AppUpdateInfo
 import com.ryzen.tvremote.update.UpdateChecker
+import com.ryzen.tvremote.voice.VoiceRecorder
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -26,9 +32,11 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
 
 class MainViewModel(application: Application) : AndroidViewModel(application) {
 
@@ -43,6 +51,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         private const val KEY_CONTROL_MODE = "control_mode"
         private const val KEY_HAPTICS = "haptics_enabled"
         private const val KEY_VOLUME_KEYS = "volume_keys_control_tv"
+        private const val KEY_AUTO_KEYBOARD = "auto_keyboard"
+        /** How long the TV keeps lending its mic to apps after the voice key. */
+        private const val TV_MIC_WINDOW_MS = 13_000L
         private const val KEY_THEME_MODE = "theme_mode"
         private const val KEY_DYNAMIC_COLOR = "dynamic_color"
         const val DEFAULT_IP = ""
@@ -82,6 +93,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val _volumeKeysControlTv = MutableStateFlow(prefs.getBoolean(KEY_VOLUME_KEYS, true))
     val volumeKeysControlTv: StateFlow<Boolean> = _volumeKeysControlTv.asStateFlow()
 
+    private val _autoKeyboard = MutableStateFlow(prefs.getBoolean(KEY_AUTO_KEYBOARD, true))
+    val autoKeyboard: StateFlow<Boolean> = _autoKeyboard.asStateFlow()
+
     // ---- UI state ----------------------------------------------------------------------------
 
     /** The quick tour opens by itself once, the first time a TV connects. */
@@ -117,6 +131,17 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     val showPinDialog = MutableStateFlow(false)
     val showDevicePicker = MutableStateFlow(false)
     val isTyping = MutableStateFlow(false)
+
+    /** The TV text field being typed into, if the TV told us about one. Seeds the typing panel. */
+    private val _typingField = MutableStateFlow<ImeField?>(null)
+    val typingField: StateFlow<ImeField?> = _typingField.asStateFlow()
+    /** True when the panel was opened by the TV rather than the user, so the TV may close it too. */
+    private var typingOpenedByTv = false
+
+    private val _voice = MutableStateFlow<VoiceUi>(VoiceUi.Idle)
+    val voice: StateFlow<VoiceUi> = _voice.asStateFlow()
+    private var voiceJob: Job? = null
+    private var recorder: VoiceRecorder? = null
     val showSettings = MutableStateFlow(false)
 
     /** True while the app is on screen; used to avoid reconnecting from the background. */
@@ -134,6 +159,28 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     if (!prefs.getBoolean(KEY_TUTORIAL_SEEN, false)) showTutorial.value = true
                 }
             }
+        }
+
+        // A text field got focus on the TV (search box, sign-in, OTP...): bring up the keyboard.
+        viewModelScope.launch {
+            client.imeField.collect { field ->
+                if (field != null) {
+                    // While the panel is open the TV echoes every edit back; the panel already has it.
+                    if (isTyping.value || !_autoKeyboard.value || _voice.value !is VoiceUi.Idle) return@collect
+                    _typingField.value = field
+                    typingOpenedByTv = true
+                    isTyping.value = true
+                } else if (isTyping.value && typingOpenedByTv) {
+                    closeTyping()
+                }
+            }
+        }
+
+        viewModelScope.launch {
+            client.voiceRequests.collect { sessionId -> acceptTvVoice(sessionId) }
+        }
+        viewModelScope.launch {
+            client.voiceEnded.collect { recorder?.stop() }
         }
 
         // Auto-reconnect to a known TV when discovery finds it again.
@@ -249,6 +296,101 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun sendText(text: String) = client.sendText(text)
 
+    /** Opens the typing panel from the keyboard button, seeded with the TV field if one is focused. */
+    fun openTyping() {
+        typingOpenedByTv = false
+        _typingField.value = client.imeField.value
+        isTyping.value = true
+    }
+
+    fun closeTyping() {
+        typingOpenedByTv = false
+        isTyping.value = false
+        _typingField.value = null
+    }
+
+    // ---- Voice search ------------------------------------------------------------------------
+
+    fun hasMicPermission(): Boolean =
+        getApplication<Application>().checkSelfPermission(Manifest.permission.RECORD_AUDIO) ==
+            PackageManager.PERMISSION_GRANTED
+
+    /** Opens a voice session on the TV and streams the microphone until the user stops talking. */
+    fun startVoice() {
+        if (voiceJob?.isActive == true) return
+        if (connectionStatus.value !is ConnectionStatus.Connected) {
+            _toastEvent.tryEmit("Not connected to a TV")
+            return
+        }
+        if (!hasMicPermission()) return
+        if (isTyping.value) closeTyping()
+
+        voiceJob = viewModelScope.launch(Dispatchers.IO) {
+            _voice.value = VoiceUi.Starting
+            val session = client.startVoice()
+            if (session == null) {
+                // No assistant answered. The TV still lends its mic to apps for a short while, so
+                // pressing a mic button on screen (YouTube search, for one) streams from the phone.
+                _voice.value = VoiceUi.WaitingForTv
+                val offered = withTimeoutOrNull(TV_MIC_WINDOW_MS) { client.voiceRequests.first() }
+                if (offered == null) {
+                    _voice.value = VoiceUi.Idle
+                    _toastEvent.tryEmit("This TV has no voice search set up")
+                    return@launch
+                }
+                client.acceptVoice(offered)
+            }
+            streamVoice()
+        }
+    }
+
+    /** The TV opened a voice session itself (an app's mic button): talk into the phone. */
+    private fun acceptTvVoice(sessionId: Int) {
+        if (voiceJob?.isActive == true || !hasMicPermission()) return
+        if (isTyping.value) closeTyping()
+        voiceJob = viewModelScope.launch(Dispatchers.IO) {
+            client.acceptVoice(sessionId)
+            streamVoice()
+        }
+    }
+
+    private suspend fun streamVoice() {
+        _voice.value = VoiceUi.Listening(0f)
+        val rec = VoiceRecorder().also { recorder = it }
+        // Debug builds: replay files/voice_test.pcm if present, and keep the last capture in
+        // files/voice_last.pcm, so the audio path can be checked without speaking.
+        val files = getApplication<Application>().filesDir
+        val replay = if (BuildConfig.DEBUG) files?.resolve("voice_test.pcm")?.takeIf { it.exists() }?.readBytes() else null
+        val dump = if (BuildConfig.DEBUG) files?.resolve("voice_last.pcm")?.outputStream() else null
+        val ok = try {
+            rec.record(
+                onLevel = { level -> if (_voice.value is VoiceUi.Listening) _voice.value = VoiceUi.Listening(level) },
+                onChunk = { bytes, length ->
+                    dump?.write(bytes, 0, length)
+                    client.sendVoice(bytes, length)
+                },
+                replay = replay,
+                replayRate = files?.resolve("voice_test.rate")?.takeIf { BuildConfig.DEBUG && it.exists() }
+                    ?.readText()?.trim()?.toIntOrNull() ?: VoiceRecorder.SAMPLE_RATE
+            )
+        } finally {
+            dump?.close()
+            client.endVoice()
+            recorder = null
+            _voice.value = VoiceUi.Idle
+        }
+        if (!ok) _toastEvent.tryEmit("Couldn't use the microphone")
+    }
+
+    /** Stops listening; what was said so far is still searched on the TV. */
+    fun stopVoice() {
+        recorder?.stop()
+        if (_voice.value is VoiceUi.Starting || _voice.value is VoiceUi.WaitingForTv) {
+            voiceJob?.cancel()
+            _voice.value = VoiceUi.Idle
+        }
+    }
+
     /** Shows a short message at the bottom of the pad. */
     fun notify(message: String) {
         _toastEvent.tryEmit(message)
@@ -321,6 +463,24 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             "pairing" -> showPinDialog.value = true
             "tour" -> showTutorial.value = true
             "typing" -> isTyping.value = true
+            "tvfield" -> {
+                _typingField.value = ImeField(value = "stranger", label = "Search movies and shows")
+                typingOpenedByTv = true
+                isTyping.value = true
+            }
+            "voicewait" -> voiceJob = viewModelScope.launch {
+                _voice.value = VoiceUi.WaitingForTv
+                delay(8000)
+                _voice.value = VoiceUi.Idle
+            }
+            "voice" -> voiceJob = viewModelScope.launch {
+                // Simulated levels so the listening panel can be checked without a TV.
+                repeat(40) { i ->
+                    _voice.value = VoiceUi.Listening(((i * 37) % 100) / 100f)
+                    delay(120)
+                }
+                _voice.value = VoiceUi.Idle
+            }
             "update" -> availableUpdate.value = AppUpdateInfo(
                 latestVersion = "1.3.0",
                 releaseNotes = "Fresh Material 3 Expressive design, a light theme and a new swipe pad.",
@@ -346,6 +506,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun setHapticsEnabled(enabled: Boolean) {
         _hapticsEnabled.value = enabled
         prefs.edit().putBoolean(KEY_HAPTICS, enabled).apply()
+    }
+
+    fun setAutoKeyboard(enabled: Boolean) {
+        _autoKeyboard.value = enabled
+        prefs.edit().putBoolean(KEY_AUTO_KEYBOARD, enabled).apply()
     }
 
     fun setVolumeKeysControlTv(enabled: Boolean) {
@@ -391,7 +556,18 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     override fun onCleared() {
         super.onCleared()
+        recorder?.stop()
         discoveryManager.stopDiscovery()
         client.disconnect()
     }
+}
+
+sealed interface VoiceUi {
+    data object Idle : VoiceUi
+    /** Waiting for the TV to open its voice search. */
+    data object Starting : VoiceUi
+    /** The TV has no assistant; waiting for an app's own mic button on the TV. */
+    data object WaitingForTv : VoiceUi
+    /** Streaming the microphone; [level] is the current loudness, 0..1. */
+    data class Listening(val level: Float) : VoiceUi
 }

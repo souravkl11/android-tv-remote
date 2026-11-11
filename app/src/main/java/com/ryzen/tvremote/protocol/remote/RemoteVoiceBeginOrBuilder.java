@@ -7,4 +7,22 @@ package com.ryzen.tvremote.protocol.remote;
 public interface RemoteVoiceBeginOrBuilder extends
     // @@protoc_insertion_point(interface_extends:remote.RemoteVoiceBegin)
     com.google.protobuf.MessageLiteOrBuilder {
+
+  /**
+   * <code>int32 session_id = 1;</code>
+   * @return The sessionId.
+   */
+  int getSessionId();
+
+  /**
+   * <code>string package_name = 2;</code>
+   * @return The packageName.
+   */
+  java.lang.String getPackageName();
+  /**
+   * <code>string package_name = 2;</code>
+   * @return The bytes for packageName.
+   */
+  com.google.protobuf.ByteString
+      getPackageNameBytes();
 }

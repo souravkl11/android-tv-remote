@@ -5,6 +5,10 @@
 package com.ryzen.tvremote.protocol.remote;
 
 /**
+ * <pre>
+ * 16-bit PCM, 8 kHz, mono samples.
+ * </pre>
+ *
  * Protobuf type {@code remote.RemoteVoicePayload}
  */
 public  final class RemoteVoicePayload extends
@@ -13,7 +17,61 @@ public  final class RemoteVoicePayload extends
     // @@protoc_insertion_point(message_implements:remote.RemoteVoicePayload)
     RemoteVoicePayloadOrBuilder {
   private RemoteVoicePayload() {
+    samples_ = com.google.protobuf.ByteString.EMPTY;
   }
+  public static final int SESSION_ID_FIELD_NUMBER = 1;
+  private int sessionId_;
+  /**
+   * <code>int32 session_id = 1;</code>
+   * @return The sessionId.
+   */
+  @java.lang.Override
+  public int getSessionId() {
+    return sessionId_;
+  }
+  /**
+   * <code>int32 session_id = 1;</code>
+   * @param value The sessionId to set.
+   */
+  private void setSessionId(int value) {
+    
+    sessionId_ = value;
+  }
+  /**
+   * <code>int32 session_id = 1;</code>
+   */
+  private void clearSessionId() {
+
+    sessionId_ = 0;
+  }
+
+  public static final int SAMPLES_FIELD_NUMBER = 2;
+  private com.google.protobuf.ByteString samples_;
+  /**
+   * <code>bytes samples = 2;</code>
+   * @return The samples.
+   */
+  @java.lang.Override
+  public com.google.protobuf.ByteString getSamples() {
+    return samples_;
+  }
+  /**
+   * <code>bytes samples = 2;</code>
+   * @param value The samples to set.
+   */
+  private void setSamples(com.google.protobuf.ByteString value) {
+    java.lang.Class<?> valueClass = value.getClass();
+  
+    samples_ = value;
+  }
+  /**
+   * <code>bytes samples = 2;</code>
+   */
+  private void clearSamples() {
+
+    samples_ = getDefaultInstance().getSamples();
+  }
+
   public static com.ryzen.tvremote.protocol.remote.RemoteVoicePayload parseFrom(
       java.nio.ByteBuffer data)
       throws com.google.protobuf.InvalidProtocolBufferException {
@@ -98,6 +156,10 @@ public  final class RemoteVoicePayload extends
   }
 
   /**
+   * <pre>
+   * 16-bit PCM, 8 kHz, mono samples.
+   * </pre>
+   *
    * Protobuf type {@code remote.RemoteVoicePayload}
    */
   public static final class Builder extends
@@ -110,6 +172,62 @@ public  final class RemoteVoicePayload extends
       super(DEFAULT_INSTANCE);
     }
 
+
+    /**
+     * <code>int32 session_id = 1;</code>
+     * @return The sessionId.
+     */
+    @java.lang.Override
+    public int getSessionId() {
+      return instance.getSessionId();
+    }
+    /**
+     * <code>int32 session_id = 1;</code>
+     * @param value The sessionId to set.
+     * @return This builder for chaining.
+     */
+    public Builder setSessionId(int value) {
+      copyOnWrite();
+      instance.setSessionId(value);
+      return this;
+    }
+    /**
+     * <code>int32 session_id = 1;</code>
+     * @return This builder for chaining.
+     */
+    public Builder clearSessionId() {
+      copyOnWrite();
+      instance.clearSessionId();
+      return this;
+    }
+
+    /**
+     * <code>bytes samples = 2;</code>
+     * @return The samples.
+     */
+    @java.lang.Override
+    public com.google.protobuf.ByteString getSamples() {
+      return instance.getSamples();
+    }
+    /**
+     * <code>bytes samples = 2;</code>
+     * @param value The samples to set.
+     * @return This builder for chaining.
+     */
+    public Builder setSamples(com.google.protobuf.ByteString value) {
+      copyOnWrite();
+      instance.setSamples(value);
+      return this;
+    }
+    /**
+     * <code>bytes samples = 2;</code>
+     * @return This builder for chaining.
+     */
+    public Builder clearSamples() {
+      copyOnWrite();
+      instance.clearSamples();
+      return this;
+    }
 
     // @@protoc_insertion_point(builder_scope:remote.RemoteVoicePayload)
   }
@@ -126,8 +244,13 @@ public  final class RemoteVoicePayload extends
         return new Builder();
       }
       case BUILD_MESSAGE_INFO: {
-          java.lang.Object[] objects = null;java.lang.String info =
-              "\u0000\u0000";
+          java.lang.Object[] objects = new java.lang.Object[] {
+            "sessionId_",
+            "samples_",
+          };
+          java.lang.String info =
+              "\u0000\u0002\u0000\u0000\u0001\u0002\u0002\u0000\u0000\u0000\u0001\u0004\u0002\n" +
+              "";
           return newMessageInfo(DEFAULT_INSTANCE, info, objects);
       }
       // fall through
