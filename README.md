@@ -10,6 +10,14 @@ No ads, no tracking, and no bloat.
   <a href="https://github.com/souravkl11/android-tv-remote/tree/ios"><img alt="iOS version" src="https://img.shields.io/badge/iOS-Version-000000?style=for-the-badge&logo=apple&logoColor=white"></a>
 </p>
 
+<p align="center">
+  <img src="docs/screenshots/remote.png" alt="The remote with the D-pad" width="240">
+  &nbsp;
+  <img src="docs/screenshots/typing.png" alt="Typing into a TV search box from the phone" width="240">
+  &nbsp;
+  <img src="docs/screenshots/voice.png" alt="Voice search listening" width="240">
+</p>
+
 ## iOS version
 
 There is also a native iPhone version, written in SwiftUI with iOS 26 Liquid Glass. It speaks the same Android TV Remote Protocol v2 as this app and has no third-party dependencies. It isn't on the App Store: you build and install it yourself with [xtool](https://xtool.sh), and the steps are in the README on the [`ios` branch](https://github.com/souravkl11/android-tv-remote/tree/ios).
