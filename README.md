@@ -11,7 +11,7 @@ No ads, no tracking, and no bloat.
 </p>
 
 <p align="center">
-  <img src="https://i.ibb.co/Gf8qMzpv/screenshots.webp" alt="Screenshots: the remote, typing into a TV search box, and voice search" width="800">
+  <img src="https://i.ibb.co/Gf8qMzpv/screenshots.webp" alt="Screenshots: the remote, typing into a TV search box, and voice search" width="560">
 </p>
 
 ## iOS version
