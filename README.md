@@ -11,11 +11,7 @@ No ads, no tracking, and no bloat.
 </p>
 
 <p align="center">
-  <img src="docs/screenshots/remote.png" alt="The remote with the D-pad" width="240">
-  &nbsp;
-  <img src="docs/screenshots/typing.png" alt="Typing into a TV search box from the phone" width="240">
-  &nbsp;
-  <img src="docs/screenshots/voice.png" alt="Voice search listening" width="240">
+  <img src="https://i.ibb.co/Gf8qMzpv/screenshots.webp" alt="Screenshots: the remote, typing into a TV search box, and voice search" width="800">
 </p>
 
 ## iOS version
